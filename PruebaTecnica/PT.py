@@ -1,10 +1,8 @@
-#Basic imports
 from ctypes import *
 import sys
 import random
 import math
 import time
-#Phidget specific imports
 from Phidgets.PhidgetException import PhidgetErrorCodes, PhidgetException
 from Phidgets.Events.Events import AttachEventArgs, DetachEventArgs, ErrorEventArgs, InputChangeEventArgs, OutputChangeEventArgs, SensorChangeEventArgs
 from Phidgets.Devices.InterfaceKit import InterfaceKit
@@ -21,8 +19,6 @@ rele=InterfaceKit()
 placa= InterfaceKit()
 nroSerieRele= 134980
 nroSeriePlaca= 339648 
-estadoVent= 0
-variable= 1
 
 
 def instanciarIK (nroSerie):
@@ -37,10 +33,9 @@ def mostrarInfoIK (ik):
     print("|------------|----------------------------------|--------------|------------|")
     print("|- %8s -|- %30s -|- %10d -|- %8d -|" % (ik.isAttached(), ik.getDeviceName(), ik.getSerialNum(), ik.getDeviceVersion()))
     print("|------------|----------------------------------|--------------|------------|")
-    print("Number of Digital Inputs: %i" % (ik.getInputCount()))
-    print("Number of Digital Outputs: %i" % (ik.getOutputCount()))
-    print("Number of Sensor Inputs: %i" % (ik.getSensorCount()))
-
+    print("Numero de entradas digitales: %i" % (ik.getInputCount()))
+    print("Numero de salidas digitales: %i" % (ik.getOutputCount()))
+    print("Numero de entradas analogicas: %i" % (ik.getSensorCount()))
 
 def conversionTemperatura(lectura):
     convertido= (lectura * 0.2222) - 61.111
@@ -63,9 +58,6 @@ def apagarVentilador(ik):
     if ik.getOutputState(puertoVent) == 1:
         ik.setOutputState(puertoVent, 0)
         
-def cambiarEstadoVentilador(i):
-    variable= i
-
 def apagarLuz(ik):
     if ik.getOutputState(dispLuz) == 1:
         ik.setOutputState(dispLuz, 0)    
@@ -74,10 +66,6 @@ def manejadorSensores(e):
     if e.index == puertoTemp:
         valor= conversionTemperatura(e.value)
         print ("Valor en C: " + str(valor))
-        #if valor >= umbralTemp:
-         #   encenderVentilador(rele)
-        #else:
-           # estadoVent= 0
     elif e.index == puertoLuz:
         valor= e.value
         #valor= conversionLuminancia(e.value)
@@ -114,21 +102,7 @@ while (1==1):
     else:
         apagarVentilador(rele)
     time.sleep(5)
-    
 
-#encenderVentilador(rele)
-apagarVentilador(rele)
-
-print("Ingrese nro de rele o s para salir....")
-chr = sys.stdin.read(1)
-while chr != 's':
-    print("Ingrese nro de rele o s para salir....")
-    chr = sys.stdin.read(1)
-
-
-print("Press Enter to quit....")
-
-chr = sys.stdin.read(1)
 
 print("Closing...")
 
