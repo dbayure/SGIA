@@ -7,10 +7,10 @@ from Phidgets.PhidgetException import PhidgetErrorCodes, PhidgetException
 from Phidgets.Events.Events import AttachEventArgs, DetachEventArgs, ErrorEventArgs, InputChangeEventArgs, OutputChangeEventArgs, SensorChangeEventArgs
 from Phidgets.Devices.InterfaceKit import InterfaceKit
 
-ipWS= '192.168.1.21'
+ipWS= '192.168.0.100'
 puertoWS= 5001
-puertoTemp= 2
-puertoLuz= 5
+puertoTemp= 5
+puertoLuz= 2
 puertoVent= 0
 dispLuz= 3
 rele=InterfaceKit()
@@ -59,51 +59,57 @@ def obtenerTemperatura(ik):
     temp= conversionTemperatura(valor)
     return temp
 
-placa = instanciarIK (nroSeriePlaca)
-rele= instanciarIK(nroSerieRele)
-placa.waitForAttach(10000)
-rele.waitForAttach(10000)
-mostrarInfoIK(placa)
-mostrarInfoIK(rele)
-   
-print("""Comandos...
-         1. Obtener lectura de temperatura
-         2. Encender ventilador
-         3. Encender luz
-         4. Apagar ventilador
-         5. Apagar luz
-         6. Salir
-         
-Ingrese nro de comando...""")
+def esperarConexion(ik):
+    ik.waitForAttach(10000)
 
-chr = '\n'
-while chr != '6':
-    if chr == '1':
-        temp= obtenerTemperatura(placa)
-        print('Temperatura actual: ' +str(temp))
-    elif chr == '2':
-        encenderVentilador(rele)
-    elif chr == '3':
-        encenderLuz(placa)
-    elif chr == '4':
-        apagarVentilador(rele)
-    elif chr == '5':
-        apagarLuz(placa)
-    elif chr == '6':
-        print('Saliendo del sistema....')
-    else:
-        if chr != '\n':
-            print ('Comando no valido.')
-            print("Ingrese nro de comando...")
-    chr = sys.stdin.read(1)
+def main():
+    placa = instanciarIK (nroSeriePlaca)
+    rele= instanciarIK(nroSerieRele)
+    placa.waitForAttach(10000)
+    rele.waitForAttach(10000)
+    mostrarInfoIK(placa)
+    mostrarInfoIK(rele)
+       
+    print("""Comandos...
+             1. Obtener lectura de temperatura
+             2. Encender ventilador
+             3. Encender luz
+             4. Apagar ventilador
+             5. Apagar luz
+             6. Salir
+             
+    Ingrese nro de comando...""")
     
-try:
-    rele.closePhidget()
-    placa.closePhidget()
-except PhidgetException as e:
-    print("Phidget Exception %i: %s" % (e.code, e.details))
-    print("Exiting....4")
-    exit(1)
+    chr = '\n'
+    while chr != '6':
+        if chr == '1':
+            temp= obtenerTemperatura(placa)
+            print('Temperatura actual: ' +str(temp))
+        elif chr == '2':
+            encenderVentilador(rele)
+        elif chr == '3':
+            encenderLuz(placa)
+        elif chr == '4':
+            apagarVentilador(rele)
+        elif chr == '5':
+            apagarLuz(placa)
+        elif chr == '6':
+            print('Saliendo del sistema....')
+        else:
+            if chr != '\n':
+                print ('Comando no valido.')
+                print("Ingrese nro de comando...")
+        chr = sys.stdin.read(1)
+        
+    try:
+        rele.closePhidget()
+        placa.closePhidget()
+    except PhidgetException as e:
+        print("Phidget Exception %i: %s" % (e.code, e.details))
+        print("Exiting....4")
+        
 
-print("Done.")
-exit(0)
+if __name__ == "__main__":
+    # stuff only to run when not called via 'import' here
+    main()
+
