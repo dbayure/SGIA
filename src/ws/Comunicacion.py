@@ -4,7 +4,7 @@ Created on 22/08/2014
 @author: dario
 '''
 
-class consultas(object):
+class Comunicacion(object):
     '''
     classdocs
     '''
