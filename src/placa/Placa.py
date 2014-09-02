@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class Placa(object):
     """
     Clase utilizada para instanciar el objeto placa controladora, se creará una instancia única de esta.
@@ -16,7 +17,7 @@ class Placa(object):
     def __init__(self, nroSerie, estadoSistema, listaDispositivos, listaGrupoActuadores, listaFactores):
         """
         Constructor de la clase placa, recibe como parámetros:
-            -nroSerie : int 
+            -nroSerie : String
             -estadoSistema: Char(1), estos pueden ser: I=Inactivo, C=Configuración, M=Manual o A=Automático 
             -listaDispositivos: List<Dispositivo>
             -listaGrupoActuadores: List<GrupoActuadores>
@@ -30,7 +31,7 @@ class Placa(object):
 
     def get_nro_serie(self):
         """
-        Devuelve el número de serie de la placa como un int
+        Devuelve el número de serie de la placa como un String
         """
         return self.__nroSerie
 
@@ -66,7 +67,7 @@ class Placa(object):
 
     def set_nro_serie(self, value):
         """
-        Asigna un int como número de serie de la placa
+        Asigna un String como número de serie de la placa
         """
         self.__nroSerie = value
 

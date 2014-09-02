@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 from src.placa.Dispositivo import Dispositivo
 
 class PlacaAuxiliar(Dispositivo):
@@ -20,7 +21,7 @@ class PlacaAuxiliar(Dispositivo):
             -idDispositivo : int (dispositivo)
             -nombre: String (dispositivo)
             -modelo: String (dispositivo)
-            -numeroPuerto: int (dispositivo)
+            -numeroPuerto: String (dispositivo)
             -activoSistema: Boolean (dispositivo)
             -nroSerie: int (placaAuxiliar)
             -tipo: String (placaAuxiliar)
@@ -34,7 +35,7 @@ class PlacaAuxiliar(Dispositivo):
 
     def get_nro_serie(self):
         """
-        Devuelve el número de serie de una placa auxiliar como un int
+        Devuelve el número de serie de una placa auxiliar como un String
         """
         return self.__nroSerie
 
@@ -55,7 +56,7 @@ class PlacaAuxiliar(Dispositivo):
 
     def set_nro_serie(self, value):
         """
-        Asigna un int como número de serie de una placa auxiliar
+        Asigna un String como número de serie de una placa auxiliar
         """
         self.__nroSerie = value
 

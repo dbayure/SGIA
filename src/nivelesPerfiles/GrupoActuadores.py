@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class GrupoActuadores(object):
     """
     La clase GrupoActuadores se utiliza para nuclear actuadores de un mismo tipo, que deben ejecutar

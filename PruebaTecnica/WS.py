@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 import soaplib
 import soaplib.core
 import EncenderDispositivo

@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class Mensaje(object):
     """
     Clase utilizada para centralizar el manejo de mensajes del sistema.

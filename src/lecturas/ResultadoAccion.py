@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 from src.lecturas.Resultado import Resultado
 
 class ResultadoAccion(Resultado):

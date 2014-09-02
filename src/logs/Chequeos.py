@@ -1,9 +1,4 @@
-'''
-Created on 22/08/2014
-
-@author: dario
-'''
-
+# -*- encoding: utf-8 -*-
 class chequeos(object):
     '''
     classdocs

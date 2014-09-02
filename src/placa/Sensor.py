@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 from src.placa.Dispositivo import Dispositivo
 
 class Sensor(Dispositivo):

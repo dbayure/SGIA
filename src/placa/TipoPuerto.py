@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class TipoPuerto(object):
     """
     La clase tipoPuerto es utilizada para instanciar un tipo de puerto al que pueden estar conectados

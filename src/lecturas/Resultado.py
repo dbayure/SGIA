@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class Resultado(object):
     """
     La clase resultado se utiliza para instanciar resultados de lecturas o acciones disparadas.

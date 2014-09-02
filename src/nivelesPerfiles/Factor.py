@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class Factor(object):
     """
     La clase factor se utiliza para nuclear sensores de un mismo tipo, por ejemplo temperatura.

@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 class TipoActuador(object):
     """
     La clase tipoActuador es utilizada para instanciar un tipo de actuador, estos pueden ser,

@@ -1,3 +1,4 @@
+# -*- encoding: utf-8 -*-
 """Modulo "dispositivo" contiene la definición de la clase dispositivo"""
 
 class Dispositivo(object):
@@ -109,8 +110,3 @@ class Dispositivo(object):
     modelo = property(get_modelo, set_modelo, None, None)
     numeroPuerto = property(get_numero_puerto, set_numero_puerto, None, None)
     activoSistema = property(get_activo_sistema, set_activo_sistema, None, None)
-
-    
-    
-    
-        
