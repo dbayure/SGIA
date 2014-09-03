@@ -10,6 +10,7 @@ from src.placa.Actuador import Actuador
 from src.placa.TipoPlaca import TipoPlaca
 from src.placa.PlacaAuxiliar import PlacaAuxiliar
 from src.nivelesPerfiles.Factor import Factor
+from src.nivelesPerfiles.GrupoActuadores import GrupoActuadores
 
 class ManejadorBD(object):
     """
@@ -193,6 +194,39 @@ class ManejadorBD(object):
         for fila in cursor:
             idSensor= fila[0]
             lista.append(idSensor)
+        cursor.close()
+        return lista
+    
+    def obtenerListaGrupoActuadores(self, conexion):
+        """
+        Devuelve una lista con todos los grupos de actuadores activos en el sistema
+        """
+        lista= list()
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectGruposActuadoresActivos())
+        for fila in cursor:
+            idGrupoActuador= fila[0]
+            estado= fila[1]
+            nombre= fila[2]
+            activoSistema= fila[3]
+            grupo= GrupoActuadores(idGrupoActuador, estado, nombre, None, activoSistema)
+            lista.append(grupo)
+        cursor.close()
+        return lista
+        
+    def obtenerListaIdActuadoresGrupo(self, conexion, idGrupo):
+        """
+        Devuelve la lista de id de dispositivos sensores pertenecientes al factor pasado
+        como parámetro
+        """
+        lista= list()
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectIdActuadoresGrupo(), (idGrupo,))
+        for fila in cursor:
+            idActuador= fila[0]
+            lista.append(idActuador)
         cursor.close()
         return lista
         

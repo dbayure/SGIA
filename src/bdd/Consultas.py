@@ -86,6 +86,12 @@ class Consultas(object):
                     and d.activoSistema = 'S'"""
         return consulta
     
+    def selectGruposActuadoresActivos(self):
+        consulta= """select idGrupoActuadores, estado, nombre, activoSistema
+                    from gruposActuadores
+                    where activoSistema = 'S'"""
+        return consulta
+    
     def selectTipoPlaca(self):
         consulta= """select nombre
                     from tipoPlacas
@@ -130,6 +136,13 @@ class Consultas(object):
                     from sensores
                     where idFactor = ?"""
         return consulta
+    
+    def selectIdActuadoresGrupo(self):
+        consulta="""select idDispositivo
+                    from actuadores
+                    where idGrupoActuadores = ?"""
+        return consulta
+
 
     
     def selectExisteNivelSeveridad(self):
