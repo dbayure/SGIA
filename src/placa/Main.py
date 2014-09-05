@@ -7,11 +7,13 @@ Tiene como atributos una instancia única de placa y una instancia única de ws.
 """
 from src.bdd.ManejadorBD import ManejadorBD
 from src.placa.Placa import Placa
-from Phidgets.Devices.InterfaceKit import InterfaceKit
 from Phidgets.PhidgetException import PhidgetException
+from Phidgets.Devices.InterfaceKit import InterfaceKit
+from src.recursos.Herramientas import Herramientas
+from src.placa.PlacaAuxiliar import PlacaAuxiliar
 
-ipWS= '192.168.0.103'
-puertoWS= 5001
+
+
 __placa=None
 __ws=None
 
@@ -31,10 +33,11 @@ def iniciarPlaca():
         listaIdSensores=mbd.obtenerListaIdSensoresFactor(con, idFactor)
         for idSensor in listaIdSensores:
             i=0
-            while idSensor <>listaDispositivos[i].get_id_dispositivo() and i < len(listaDispositivos):
+            while i < len(listaDispositivos) and idSensor <>listaDispositivos[i].get_id_dispositivo():
                 i= i+1
-            sensor= listaDispositivos[i]
-            listaSensores.append(sensor)
+            if i < len(listaDispositivos):
+                sensor= listaDispositivos[i]
+                listaSensores.append(sensor)
         factor.set_lista_sensores(listaSensores)
     #aca la lista de factores ya está actualizada con la lista de sensores de cada una
     listaGrupoActuadores= mbd.obtenerListaGrupoActuadores(con)
@@ -42,27 +45,35 @@ def iniciarPlaca():
         idGrupoActuadores= grupo.get_id_grupo_actuador()
         listaActuadores= list()
         listaIdActuadores=mbd.obtenerListaIdActuadoresGrupo(con, idGrupoActuadores)
+        print('cantidad de id actuadores en el grupo en el iniciarPlaca: '+ str(len(listaIdActuadores)))
         for idActuador in listaIdActuadores:
-            i=0
-            while i < len(listaDispositivos) and (idActuador <>listaDispositivos[i].get_id_dispositivo()) :
-                i= i+1
-            if i < len(listaDispositivos):
-                actuador= listaDispositivos[i]
+            actuador= obtenerDispositivoSegunId(listaDispositivos, idActuador)
+            
+            if actuador <> None:
                 listaActuadores.append(actuador)
+        print('cantidad de actuadores en el grupo en el iniciarPlaca: '+ str(len(listaActuadores)))
         grupo.set_lista_actuadores(listaActuadores)
     mbd.cerrarConexion()
     #aca la lista de grupos de actuadores ya está actualizada con la lista de actuadores de cada una 
     #Tengo todo lo necesario para instanciar el objeto Placa
+    
     placa= Placa(nroSerie, estadoSistema, listaDispositivos, listaGrupoActuadores, listaFactores)     
     return placa
 
-def instanciarIK (nroSerie):
-    """
-    Método utilizado para instanciar un objeto de tipo InterfaceKit de la API de Phidgets, que permite interactuar con 
-    la placa controladora y sus puertos"""
-    ik= InterfaceKit()
-    ik.openRemoteIP(ipWS, puertoWS, nroSerie)
-    return ik
+def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
+    actuador=None
+    i=0
+    control= False
+    while i < len(listaDispositivos) and (idDispositivo <>listaDispositivos[i].get_id_dispositivo()) and control == False:
+        if isinstance(listaDispositivos[i], (PlacaAuxiliar)):
+            actuador=obtenerDispositivoSegunId(listaDispositivos[i].get_lista_dispositivos(), idDispositivo)
+        if actuador <> None:
+            control= True
+        i= i+1
+    if i < len(listaDispositivos) and control == False:
+        actuador= listaDispositivos[i]
+    return actuador
+
 
 def iniciarWS(): #DESPUES
     return None
@@ -79,13 +90,24 @@ def chequeoDispositivo(idDispositivo): #DESPUES
 def chequeoDispositivos(): #DESPUES
     return None
 
-def lecturaSensor(sensor, ik):
+def obtenerIkPadre (dispositivo):
+    padre= dispositivo.get_padre()
+    if padre == None:
+        print('devuelve el ik de la placa')
+        return __placa.get_ik()
+    else:
+        return padre.get_ik()
+        
+
+def lecturaSensor(sensor):
     """Método que permite obtener una lectura de un sensor conectado a un puerto analógico o digital,
     recibe como parámetros el sensor del que se pretende obtener la lectura y el interface kit que puede 
     interactuar con dicho sensor. Devuelve la lectura convertida a su valor final luego de aplicar la fórmula 
     propia del sensor"""
+    ik= obtenerIkPadre (sensor)
     tipoPuerto= sensor.get_tipo_puerto()
     if tipoPuerto.get_nombre() == "analogico":
+        print('puerto: '+ str(sensor.get_numero_puerto()))
         valor=ik.getSensorValue(sensor.get_numero_puerto())
         print ('Valor bruto: '+ str(valor))
         l=valor
@@ -94,16 +116,57 @@ def lecturaSensor(sensor, ik):
         temp= ik.getInputState(sensor.get_numero_puerto())
     return temp
 
-def encenderActuador(idDispositivo):
+def encenderActuador(actuador):
+    if (actuador.get_estado_actuador() == 'A'):
+        
+        ik= obtenerIkPadre(actuador)
+        ik.setOutputState(actuador.get_numero_puerto(), 1) 
+        actuador.set_estado_actuador('E')   
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mbd.cambiarEstadoActuador(con, actuador)
+        con.commit()
+        con.close()
     return None
 
-def apagarActuador(idDispositivo):
+def apagarActuador(actuador):
+    if (actuador.get_estado_actuador() == 'E'):
+        ik= obtenerIkPadre (actuador)
+        ik.setOutputState(actuador.get_numero_puerto(), 0) 
+        actuador.set_estado_actuador('A')   
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mbd.cambiarEstadoActuador(con, actuador)
+        con.commit()
+        con.close()
     return None
 
-def encenderGrupoActuadores(idGrupoActuadores):
+def encenderGrupoActuadores(grupo):
+    
+    if (grupo.get_estado() == 'A'):
+        listaActuadores= grupo.get_lista_actuadores()
+        print('cantidad de actuadores en el grupo: '+ str(len(listaActuadores)))
+        for actuador in listaActuadores:
+            encenderActuador(actuador)
+        grupo.set_estado('E')
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mbd.cambiarEstadoGrupoActuadores(con, grupo)
+        con.commit()
+        con.close()
     return None
 
-def apagarGrupoActuadores(idGrupoActuadores):
+def apagarGrupoActuadores(grupo):
+    if (grupo.get_estado() == 'E'):
+        listaActuadores= grupo.get_lista_actuadores()
+        for actuador in listaActuadores:
+            apagarActuador(actuador)
+        grupo.set_estado('A')
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mbd.cambiarEstadoGrupoActuadores(con, grupo)
+        con.commit()
+        con.close()
     return None
 
 def cargarNivelPerfil(nivelSeveridad, perfilActivacion): #DESPUES
@@ -127,7 +190,7 @@ def detenerComportamientoAutomatico(control): #DESPUES
 def iniciarChequeosAutomaticos(): #DESPUES
     return None
 
-def procesarLecturaFactor(factor, ik): 
+def procesarLecturaFactor(factor): 
     """Método que posibilita tomar lecturas de todos los sensores pertenecientes a un factor y devuelve
     un promedio de dichas lecturas como una única lectura perteneciente al factor.
     Recibe como parámetros un factor y un interfaceKit que permite interactuar con cada sensor.
@@ -136,7 +199,7 @@ def procesarLecturaFactor(factor, ik):
     print('Lecturas del factor: '+ factor.get_nombre())
     listaLecturas= list()
     for sensor in listaSensores:
-        lectura=lecturaSensor(sensor, ik)
+        lectura=lecturaSensor(sensor)
         listaLecturas.append(lectura)
         print('Lectura obtenida: '+ str(lectura) + ' '+ factor.get_unidad())
     lecturaPromedio= sum(listaLecturas) / len(listaLecturas)
@@ -158,17 +221,18 @@ def eliminarGrupoActuadores(idGrupoActuadores): #DESPUES
 
 if __name__ == '__main__':
     __placa=iniciarPlaca()
-    ikPlaca= instanciarIK(__placa.get_nro_serie())
-    ikPlaca.waitForAttach(10000)
+    h= Herramientas()
     listaFactores= __placa.get_lista_factores()
     for factor in listaFactores:
-        procesarLecturaFactor(factor, ikPlaca)
+        procesarLecturaFactor(factor)
+    listaGrupo= __placa.get_lista_grupo_actuadores()
+    for grupo in listaGrupo:
+        if grupo.get_estado() == 'A':
+            encenderGrupoActuadores(grupo)
+        else:
+            apagarGrupoActuadores(grupo)
             
-    try:
-        ikPlaca.closePhidget()
-    except PhidgetException as e:
-        print("Phidget Exception %i: %s" % (e.code, e.details))
-        print("Exiting....4")
+    
             
             
     

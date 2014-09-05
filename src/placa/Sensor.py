@@ -13,7 +13,7 @@ class Sensor(Dispositivo):
     __formulaConversion= None
     __tipoPuerto= None
     
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, formulaConversion, tipoPuerto):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, formulaConversion, tipoPuerto):
         """
         Constructor de un sensor, recibe como parámetros:
             -idDispositivo : int (dispositivo)
@@ -25,7 +25,7 @@ class Sensor(Dispositivo):
             -tipoPuerto: tipoPuerto (sensor)
         """
         Dispositivo.__init__(self, 
-            idDispositivo, nombre, modelo, numeroPuerto, activoSistema)
+            idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre)
         self.__formulaConversion = formulaConversion
         self.__tipoPuerto = tipoPuerto
 

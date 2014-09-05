@@ -1,5 +1,7 @@
 # -*- encoding: utf-8 -*-
 from src.placa.Dispositivo import Dispositivo
+from Phidgets.PhidgetException import PhidgetException
+from src.recursos.Herramientas import Herramientas
 
 class PlacaAuxiliar(Dispositivo):
     """
@@ -14,8 +16,9 @@ class PlacaAuxiliar(Dispositivo):
     __nroSerie= None
     __tipo= None
     __listaDispositivos= None
+    __ik = None
     
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, nroSerie, tipo, listaDispositivos):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, nroSerie, tipo, listaDispositivos):
         """
         Constructor de una placaAuxiliar, recibe como parámetros:
             -idDispositivo : int (dispositivo)
@@ -27,11 +30,12 @@ class PlacaAuxiliar(Dispositivo):
             -tipo: String (placaAuxiliar)
             -listaDispositivos: List<dispositivo> (placaAuxiliar)
         """
-        Dispositivo.__init__(self, 
-            idDispositivo, nombre, modelo, numeroPuerto, activoSistema)
+        Dispositivo.__init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre)
         self.__nroSerie = nroSerie
         self.__tipo = tipo
         self.__listaDispositivos = listaDispositivos
+        h= Herramientas()
+        self.__ik= h.instanciarIK(int(nroSerie))
 
     def get_nro_serie(self):
         """
@@ -52,6 +56,12 @@ class PlacaAuxiliar(Dispositivo):
         Devuelve la lista de dispositivos conectados a una placa auxiliar como una List<dispositivo>
         """
         return self.__listaDispositivos
+    
+    def get_ik(self):
+        """
+        Devuelve el interface kit de una placa auxiliar
+        """
+        return self.__ik
 
 
     def set_nro_serie(self, value):
@@ -73,10 +83,27 @@ class PlacaAuxiliar(Dispositivo):
         Asigna una List<dispositivo> como la lista de dispositivos de una placa auxiliar
         """
         self.__listaDispositivos = value
+        
+    def set_ik(self, value):
+        """
+        Asigna un interface kit a una placa auxiliar
+        """
+        self.__ik = value
+        
+    def cerrarIK(self):
+        try:
+            self.ik.closePhidget()
+        except PhidgetException as e:
+            print("Phidget Exception %i: %s" % (e.code, e.details))
+            print("Exiting....4")
+            
+    def __del__(self):
+        self.cerrarIK() 
 
     nroSerie = property(get_nro_serie, set_nro_serie, None, None)
     tipo = property(get_tipo, set_tipo, None, None)
     listaDispositivos = property(get_lista_dispositivos, set_lista_dispositivos, None, None)
+    ik = property(get_ik, set_ik, None, None)
             
 
 

@@ -11,6 +11,7 @@ from src.placa.TipoPlaca import TipoPlaca
 from src.placa.PlacaAuxiliar import PlacaAuxiliar
 from src.nivelesPerfiles.Factor import Factor
 from src.nivelesPerfiles.GrupoActuadores import GrupoActuadores
+from src.recursos.Herramientas import Herramientas
 
 class ManejadorBD(object):
     """
@@ -87,7 +88,7 @@ class ManejadorBD(object):
             nombreTipoPuerto= resAux[0]
             cursorAux.close()
             tipoPuerto= TipoPuerto(idTipoPuerto, nombreTipoPuerto)
-            sensor= Sensor(idDispositivo, nombre, modelo, nroPuerto, activoSistema, formulaConversion, tipoPuerto)
+            sensor= Sensor(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, formulaConversion, tipoPuerto)
             lista.append(sensor)
         return None
     
@@ -117,7 +118,7 @@ class ManejadorBD(object):
             cursorAux.close()
             tipoPuerto= TipoPuerto(idTipoPuerto, nombreTipoPuerto)
             tipoActuador= TipoActuador(idTipoActuador, nombreTipoActuador)
-            actuador= Actuador(idDispositivo, nombre, modelo, nroPuerto, activoSistema, estado, tipoActuador, tipoPuerto)
+            actuador= Actuador(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, estado, tipoActuador, tipoPuerto)
             lista.append(actuador)
         return None
     
@@ -147,7 +148,10 @@ class ManejadorBD(object):
             self.__cargarSensores(l, conexion, idDispositivo)
             self.__cargarActuadores(l, conexion, idDispositivo)
             self.__cargarPlacasAuxiliares(l, conexion, idDispositivo)
-            placaAuxiliar= PlacaAuxiliar(idDispositivo, nombre, modelo, nroPuerto, activoSistema, nroSerie, tipoPlaca, l)
+            
+            placaAuxiliar= PlacaAuxiliar(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, nroSerie, tipoPlaca, l)
+            for dispositivo in l:
+                dispositivo.set_padre(placaAuxiliar)
             lista.append(placaAuxiliar)
         return None
        
@@ -229,6 +233,18 @@ class ManejadorBD(object):
             lista.append(idActuador)
         cursor.close()
         return lista
+    
+    def cambiarEstadoActuador(self, conexion, actuador):
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateEstadoActuador(), (actuador.get_estado_actuador(), actuador.get_id_dispositivo()))
+        return None
+    
+    def cambiarEstadoGrupoActuadores(self, conexion, grupoActuadores):
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateEstadoGrupoActuadores(), (grupoActuadores.get_estado(), grupoActuadores.get_id_grupo_actuador()))
+        return None
         
     
     def obtenerHostWS(self, conexion):

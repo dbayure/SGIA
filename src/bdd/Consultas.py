@@ -98,6 +98,7 @@ class Consultas(object):
                     where idTipoPlaca = ?"""
         return consulta
     
+        
     def selectHostWS(self):
         return None
     
@@ -186,6 +187,14 @@ class Consultas(object):
     
     def insertLogEvento(self):
         return None
+    
+    def updateEstadoActuador(self):
+        consulta = "update actuadores set estado = ? where idDispositivo= ?"
+        return consulta
+    
+    def updateEstadoGrupoActuadores(self):
+        consulta = "update gruposactuadores set estado = ? where idGrupoActuadores= ?"
+        return consulta
     
     def updateEstadoPlaca(self):
         return None

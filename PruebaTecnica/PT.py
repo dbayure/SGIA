@@ -7,7 +7,7 @@ from Phidgets.PhidgetException import PhidgetErrorCodes, PhidgetException
 from Phidgets.Events.Events import AttachEventArgs, DetachEventArgs, ErrorEventArgs, InputChangeEventArgs, OutputChangeEventArgs, SensorChangeEventArgs
 from Phidgets.Devices.InterfaceKit import InterfaceKit
 
-ipWS= '192.168.0.100'
+ipWS= '192.168.0.102'
 puertoWS= 5001
 puertoTemp= 2
 puertoLuz= 5

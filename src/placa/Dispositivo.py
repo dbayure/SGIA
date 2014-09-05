@@ -18,8 +18,9 @@ class Dispositivo(object):
     __modelo= None
     __numeroPuerto= None
     __activoSistema= None  
+    __padre= None
 
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre):
         """
         Constructor de un dispositivo, recibe como parámetros:
             -idDispositivo : int
@@ -33,6 +34,7 @@ class Dispositivo(object):
         self.__modelo = modelo
         self.__numeroPuerto = numeroPuerto
         self.__activoSistema = activoSistema
+        self.__padre = padre
 
     def get_id_dispositivo(self):
         """
@@ -68,6 +70,12 @@ class Dispositivo(object):
         Los estados pueden ser: A= Activo, E= Eliminado
         """
         return self.__activoSistema
+    
+    def get_padre(self):
+        """
+        Devuelve idDispositivo como un int
+        """
+        return self.__padre
 
 
     def set_id_dispositivo(self, value):
@@ -104,9 +112,17 @@ class Dispositivo(object):
         Los estados pueden ser: A= Activo, E= Eliminado
         """
         self.__activoSistema = value
+        
+    def set_padre(self, value):
+        """
+        Asigna el estado del dispositivo en el sistema, recibe un Char(1)
+        Los estados pueden ser: A= Activo, E= Eliminado
+        """
+        self.__padre = value
 
     idDispositivo = property(get_id_dispositivo, set_id_dispositivo, None, None)
     nombre = property(get_nombre, set_nombre, None, None)
     modelo = property(get_modelo, set_modelo, None, None)
     numeroPuerto = property(get_numero_puerto, set_numero_puerto, None, None)
     activoSistema = property(get_activo_sistema, set_activo_sistema, None, None)
+    padre = property(get_padre, set_padre, None, None)
