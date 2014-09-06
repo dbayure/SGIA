@@ -9,28 +9,28 @@ class ResultadoAccion(Resultado):
     y la fecha en la que se produjo la acción.
     """
 
-    __idDispositivo=None
+    __idGrupoActuadores=None
     __tipoAccion=None
     
 
-    def __init__(self, mensaje, fecha, idDispositivo, tipoAccion):
+    def __init__(self, mensaje, fecha, idGrupoActuadores, tipoAccion):
         """
         Constructor de la clase ResultadoAccion, recibe como parámetros:
             -mensaje: Mensaje (Resultado)
             -fecha: Date (Resultado)
-            -idDispositivo: int (ResultadoAccion)
+            -idGrupoActuadores: int (ResultadoAccion)
             -tipoAccion: String (ResultadoAccion)
         """
         Resultado.__init__(self, 
             mensaje, fecha)
-        self.__idDispositivo = idDispositivo
+        self.__idGrupoActuadores = idGrupoActuadores
         self.__tipoAccion = tipoAccion
 
-    def get_id_dispositivo(self):
+    def get_id_grupo_actuadores(self):
         """
         Devuelve el id de dispositivo de un ResultadoAccion como un int
         """
-        return self.__idDispositivo
+        return self.__idGrupoActuadores
 
 
     def get_tipo_accion(self):
@@ -40,7 +40,7 @@ class ResultadoAccion(Resultado):
         return self.__tipoAccion
 
 
-    def set_id_dispositivo(self, value):
+    def set_id_grupo_actuadores(self, value):
         """
         Asigna un int como id de dispositivo asociado a un ResultadoAccion
         """
@@ -53,7 +53,7 @@ class ResultadoAccion(Resultado):
         """
         self.__tipoAccion = value
 
-    idDispositivo = property(get_id_dispositivo, set_id_dispositivo, None, None)
+    idGrupoActuadores = property(get_id_grupo_actuadores, set_id_grupo_actuadores, None, None)
     tipoAccion = property(get_tipo_accion, set_tipo_accion, None, None)
 
 

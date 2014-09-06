@@ -12,21 +12,27 @@ class Factor(object):
     __idFactor= None
     __nombre=None
     __unidad=None
+    __valorMin= None
+    __valorMax= None
     __listaSensores= None
     __activoSistema= None
 
-    def __init__(self, idFactor, nombre, unidad, listaSensores, activoSistema):
+    def __init__(self, idFactor, nombre, unidad, valorMin, valorMax, listaSensores, activoSistema):
         """
         Constructor de la clase factor, recibe como parámetros:
         -idFactor: int
         -nombre: String
         -unidad: String
+        -valorMin: int
+        -valorMax: int
         -listaSensores: List<Sensor>
         -activoSistema: Char(1)
         """
         self.__idFactor = idFactor
         self.__nombre = nombre
         self.__unidad = unidad
+        self.__valorMin= valorMin
+        self.__valorMax= valorMax
         self.__listaSensores = listaSensores
         self.__activoSistema = activoSistema
 
@@ -99,12 +105,33 @@ class Factor(object):
         Los estados pueden ser: A= Activo, E= Eliminado
         """
         self.__activoSistema = value
+        
+    def get_valor_min(self):
+        return self.__valorMin
+
+
+    def get_valor_max(self):
+        return self.__valorMax
+
+
+    def set_valor_min(self, value):
+        self.__valorMin = value
+
+
+    def set_valor_max(self, value):
+        self.__valorMax = value
 
     idFactor = property(get_id_factor, set_id_factor, None, None)
     nombre = property(get_nombre, set_nombre, None, None)
     unidad = property(get_unidad, set_unidad, None, None)
     listaSensores = property(get_lista_sensores, set_lista_sensores, None, None)
     activoSistema = property(get_activo_sistema, set_activo_sistema, None, None)
+    valorMin = property(get_valor_min, set_valor_min, None, None)
+    valorMax = property(get_valor_max, set_valor_max, None, None)
+
+    
+
+    
 
 
 

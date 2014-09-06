@@ -34,8 +34,7 @@ class PlacaAuxiliar(Dispositivo):
         self.__nroSerie = nroSerie
         self.__tipo = tipo
         self.__listaDispositivos = listaDispositivos
-        h= Herramientas()
-        self.__ik= h.instanciarIK(int(nroSerie))
+        
 
     def get_nro_serie(self):
         """
@@ -98,7 +97,8 @@ class PlacaAuxiliar(Dispositivo):
             print("Exiting....4")
             
     def __del__(self):
-        self.cerrarIK() 
+        if self.__ik <> None:
+            self.cerrarIK() 
 
     nroSerie = property(get_nro_serie, set_nro_serie, None, None)
     tipo = property(get_tipo, set_tipo, None, None)

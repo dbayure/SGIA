@@ -31,11 +31,8 @@ class Placa(object):
         self.__listaDispositivos = listaDispositivos
         self.__listaGrupoActuadores = listaGrupoActuadores
         self.__listaFactores = listaFactores
-        h= Herramientas()
-        self.__ik= h.instanciarIK(int(nroSerie))
-        print('constructor placa')
-
-  
+        
+ 
 
     def get_nro_serie(self):
         """
@@ -128,7 +125,8 @@ class Placa(object):
             print("Exiting....4")
             
     def __del__(self):
-        self.cerrarIK() 
+        if self.__ik <> None:
+            self.cerrarIK() 
 
     nroSerie = property(get_nro_serie, set_nro_serie, None, None)
     estadoSistema = property(get_estado_sistema, set_estado_sistema, None, None)

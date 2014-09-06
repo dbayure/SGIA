@@ -127,7 +127,7 @@ class Consultas(object):
         return None
     
     def selectFactores(self):
-        consulta="""select idFactor, nombre, unidad, activoSistema
+        consulta="""select idFactor, nombre, unidad, valorMin, valorMax, activoSistema
                     from factores
                     where activoSistema= 'S'"""
         return consulta
@@ -156,7 +156,10 @@ class Consultas(object):
         return None
     
     def selectMensaje(self):
-        return None
+        consulta= """select m.idMensaje, t.nombre, m.texto
+                    from mensajes m, tipoMensajes t
+                    where m.idTipoMensaje = t.idTipoMensaje and m.idMensaje = ? """
+        return consulta
     
     def insertActuador(self):
         return None
@@ -171,10 +174,12 @@ class Consultas(object):
         return None
     
     def insertLecturaSensor(self):
-        return None
+        consulta="insert into lecturas (idDispositivo, fecha, valor) values (?, datetime('now', 'localtime'), ?)"
+        return consulta
     
     def insertAccionActuador(self):
-        return None
+        consulta="insert into acciones (idDispositivo, fecha, tipoAccion) values (?, datetime('now', 'localtime'), ?)"
+        return consulta
     
     def insertGrupoActuadores(self):
         return None
@@ -199,20 +204,17 @@ class Consultas(object):
     def updateEstadoPlaca(self):
         return None
     
-    def updateActivoSistemaSensor(self):
-        return None
-    
-    def updateActivoSistemaActuador(self):
-        return None
-    
-    def updateActivoSistemaPlacaAuxiliar(self):
-        return None
+    def updateActivoSistemaDispositivo(self):
+        consulta= "update dispositivos set activoSistema = 'N' where idDispositivo = ?"
+        return consulta
     
     def updateActivoSistemaFactor(self):
-        return None
+        consulta= "update factores set activoSistema = 'N' where idFactor = ?"
+        return consulta
     
     def updateActivoSistemaGrupoActuadores(self):
-        return None
+        consulta= "update gruposActuadores set activoSistema = 'N' where idGrupoActuadores = ?"
+        return consulta
     
     def updateActivoSistemaNivelSeveridad(self):
         return None

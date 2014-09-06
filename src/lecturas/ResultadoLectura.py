@@ -5,30 +5,30 @@ class ResultadoLectura(Resultado):
     """
     La clase ResultadoLectura hereda de la clase Resultado, se utiliza para retornar un resultado
     luego de una lectura sobre un sensor.
-    Sus atributos son: el id del dispositivo sensor sobre el que se efectuó la lectura y el valor obtenido de la misma
+    Sus atributos son: el id del factor sobre el que se efectuó la lectura y el valor obtenido de la misma
     """
 
-    __idDispositivo=None
+    __idFactor=None
     __valor=None
 
-    def __init__(self, mensaje, fecha, idDispositivo, valor):
+    def __init__(self, mensaje, fecha, idFactor, valor):
         """
         Constructor de la clase ResultadoLectura, recibe como parámetros:
             -mensaje: Mensaje (Resultado)
             -fecha: Date (Resultado)
-            -idDispositivo: int (ResultadoLectura)
+            -idFactor: int (ResultadoLectura)
             -valor: float (ResultadoLectura)
         """
         Resultado.__init__(self, 
             mensaje, fecha)
-        self.__idDispositivo = idDispositivo
+        self.__idFactor = idFactor
         self.__valor = valor
 
-    def get_id_dispositivo(self):
+    def get_id_factor(self):
         """
         Devuelve el id de dispositivo de un ResultadoLectura como un int
         """
-        return self.__idDispositivo
+        return self.__idFactor
 
 
     def get_valor(self):
@@ -38,11 +38,11 @@ class ResultadoLectura(Resultado):
         return self.__valor
 
 
-    def set_id_dispositivo(self, value):
+    def set_id_factor(self, value):
         """
         Asigna un int como id de dispositivo asociado a un ResultadoLectura
         """
-        self.__idDispositivo = value
+        self.__idFactor = value
 
 
     def set_valor(self, value):
@@ -51,7 +51,7 @@ class ResultadoLectura(Resultado):
         """
         self.__valor = value
 
-    idDispositivo = property(get_id_dispositivo, set_id_dispositivo, None, None)
+    idFactor = property(get_id_factor, set_id_factor, None, None)
     valor = property(get_valor, set_valor, None, None)
 
     
