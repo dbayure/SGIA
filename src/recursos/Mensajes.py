@@ -13,3 +13,4 @@ actuadoresApagados= 8
 apagadoGrupoError= 9
 apagadoGrupoOk= 10
 apagadoGrupoParcial= 11
+noExisteGrupoActuadores= 12

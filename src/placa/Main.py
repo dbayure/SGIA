@@ -15,7 +15,15 @@ from src.recursos import Propiedades, Mensajes
 from src.lecturas.ResultadoLectura import ResultadoLectura
 from datetime import datetime
 from src.lecturas.ResultadoAccion import ResultadoAccion
+import soaplib.core
+from src.logs.Mensaje import Mensaje
+from src.bdd.ManejadorBD import ManejadorBD
+from src.recursos import Mensajes
+from soaplib.wsgi_soap import SimpleWSGISoapApp
+from soaplib.service import soapmethod
+from soaplib.serializers.primitive import String, Integer, Array
 
+import threading
 
 
 __placa=None
@@ -87,8 +95,17 @@ def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
     return actuador
 
 
-def iniciarWS(): #DESPUES
-    return None
+class iniciarWS(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        try:
+            from wsgiref.simple_server import make_server
+            server = make_server('localhost', 7789, Comunicacion())
+            server.serve_forever()
+        except ImportError:
+            print ("Error: example server code requires Python >= 2.5")
 
 def cambiarEstadoPlaca(estado):
     return None
@@ -434,10 +451,49 @@ def eliminarGrupoActuadores(grupoActuadores):
     con.close()
     grupoActuadores.set_activo_sistema('N')
     return None
+
+def pruebaWS(idGrupo):
+    print('Desde el ws intenta llamar al id: '+str(idGrupo))
+    
+def getPlaca():
+    return __placa
+
+class Comunicacion(SimpleWSGISoapApp):
+    
+    @soapmethod(Integer,_returns=Mensaje)
+    def encenderGrupoActuadores(self, idGrupo):
+        placa= getPlaca()
+        listaGrupoActuadores= placa.get_lista_grupo_actuadores()
+        mensaje= None
+        grupo=None
+        i=0
+        while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
+            i= i+1
+        if i < len(listaGrupoActuadores):
+            grupo= listaGrupoActuadores[i]
+            resultado=encenderGrupoActuadores(grupo)
+            mensaje= resultado.get_mensaje()
+            print('Obtiene el mensaje: '+mensaje.get_texto())
+            #return mensaje
+        else:
+            print ('No existe grupo de actuadores')
+            idMensaje= Mensajes.noExisteGrupoActuadores
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+            #return mensaje
+            #mensaje.get_texto()
+        return mensaje
+        
     
 
 if __name__ == '__main__':
     __placa=iniciarPlaca()
+    t = iniciarWS()
+    t.start()
+    threading.activeCount()
+
     h= Herramientas()
     listaFactores= __placa.get_lista_factores()
     for factor in listaFactores:
@@ -461,6 +517,8 @@ if __name__ == '__main__':
             print(resultado.get_mensaje().get_texto())
             print ('Fecha: '+str(resultado.get_fecha()))
             print ('Estado: '+resultado.get_tipo_accion())
+
+  
             
     
             
