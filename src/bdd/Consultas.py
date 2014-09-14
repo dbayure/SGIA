@@ -25,6 +25,20 @@ class Consultas(object):
         consulta="select nroSeriePlaca from parametros"
         return consulta
     
+    def selectPeriodicidadLecturaPlaca(self):
+        """
+        Devuelve la consulta para obtener el estado de la placa como un String
+        """
+        consulta="select periodicidadLecturas from parametros"
+        return consulta
+    
+    def selectPeriodicidadNivelesPlaca(self):
+        """
+        Devuelve la consulta para obtener el estado de la placa como un String
+        """
+        consulta="select periodicidadNiveles from parametros"
+        return consulta
+    
     def selectSensoresActivosPlacaPadre(self):
         consulta= """select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, s.formulaConversion, s.idTipoPuerto
                      from sensores s, dispositivos d
@@ -118,7 +132,12 @@ class Consultas(object):
         return None
     
     def selectLecturasPorCantidad(self):
-        return None
+        consulta= """select valor
+                    from lecturasFactores
+                    where idFactor= ?
+                    order by fecha desc
+                    limit ?"""
+        return consulta
     
     def selectFactorId(self):
         return None
@@ -150,10 +169,12 @@ class Consultas(object):
         return None
     
     def selectObtenerNivelesSeveridad(self):
-        return None
+        consulta= "select idNivel, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo, idPerfilActivacion, activoSistema from nivelesSeveridad where activoSistema = 'S'"
+        return consulta
     
-    def selectObtenerPerfilActivacion(self):
-        return None
+    def selectIdGruposActuadoresEstadosActivosPerfil(self):
+        consulta="select idGrupoActuadores, estado from perfilesActivacion where idPerfilActivacion = ? and activoSistema = 'S'"
+        return consulta
     
     def selectMensaje(self):
         consulta= """select m.idMensaje, t.nombre, m.texto
@@ -161,20 +182,66 @@ class Consultas(object):
                     where m.idTipoMensaje = t.idTipoMensaje and m.idMensaje = ? """
         return consulta
     
+    def selectUltimoFactor(self):
+        consulta= "select max(idFactor) from factores"
+        return consulta
+    
+    def selectUltimoTipoPlaca(self):
+        consulta= "select max(idTipoPlaca) from tipoPlacas"
+        return consulta
+    
+    def selectUltimoTipoActuador(self):
+        consulta= "select max(idTipoActuador) from tipoActuadores"
+        return consulta
+    
+    def selectUltimoDispositivo(self):
+        consulta= "select max(idDispositivo) from dispositivos"
+        return consulta
+    
+    def selectUltimoGrupoActuadores(self):
+        consulta= "select max(idGrupoActuadores) from gruposActuadores"
+        return consulta
+    
+    
+    
     def insertActuador(self):
-        return None
+        consulta= """insert into actuadores (idDispositivo, estado, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores, fechaAlta)
+                    values (?, 'A', ?, ?, ?, ?, datetime('now', 'localtime'))"""
+        return consulta
     
     def insertSensor(self):
-        return None
+        consulta="""insert into sensores (idDispositivo, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor, fechaAlta)
+                    values (?, ?, ?, ?, ?, datetime('now', 'localtime'))"""
+        return consulta
+    
+    def insertTipoPlaca(self):
+        consulta="insert into tipoPLacas (nombre) values (?)"
+        return consulta
+    
+    def insertTipoActuador(self):
+        consulta="insert into tipoActuadores (nombre) values (?)"
+        return consulta
+    
+    def insertFactor(self):
+        consulta= """insert into factores (nombre, unidad, valorMin, valorMax, activoSistema)
+                        values (?, ?, ?, ?, ?)"""
+        return consulta
     
     def insertDispositivo(self):
-        return None
+        consulta= """insert into dispositivos (nombre, modelo, nroPuerto, activoSistema) 
+                        values (?, ?, ?, ?)"""
+        return consulta
     
     def insertPlacaAuxiliar(self):
-        return None
+        consulta= "insert into placasAuxiliares (idDispositivo, nroSerie, idTipoPlaca, idPlacaPadre, fechaAlta) values (?, ?, ?, ?, datetime('now', 'localtime'))"
+        return consulta
     
     def insertLecturaSensor(self):
         consulta="insert into lecturas (idDispositivo, fecha, valor) values (?, datetime('now', 'localtime'), ?)"
+        return consulta
+    
+    def insertLecturaFactor(self):
+        consulta="insert into lecturasFactores (idFactor, fecha, valor) values (?, ?, ?)"
         return consulta
     
     def insertAccionActuador(self):
@@ -182,7 +249,8 @@ class Consultas(object):
         return consulta
     
     def insertGrupoActuadores(self):
-        return None
+        consulta= "insert into gruposActuadores (estado, nombre, activoSistema) values ('A', ?, 'S')"
+        return consulta
     
     def insertNivelSeveridad(self):
         return None
@@ -202,7 +270,8 @@ class Consultas(object):
         return consulta
     
     def updateEstadoPlaca(self):
-        return None
+        consulta= "update parametros set estadoPlaca=?"
+        return consulta
     
     def updateActivoSistemaDispositivo(self):
         consulta= "update dispositivos set activoSistema = 'N' where idDispositivo = ?"

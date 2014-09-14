@@ -19,8 +19,7 @@ class ResultadoLectura(Resultado):
             -idFactor: int (ResultadoLectura)
             -valor: float (ResultadoLectura)
         """
-        Resultado.__init__(self, 
-            mensaje, fecha)
+        Resultado.__init__(self, mensaje, fecha)
         self.__idFactor = idFactor
         self.__valor = valor
 

@@ -14,6 +14,8 @@ from src.nivelesPerfiles.GrupoActuadores import GrupoActuadores
 from src.recursos.Herramientas import Herramientas
 from src.logs.Mensaje import Mensaje
 from Phidgets.PhidgetException import PhidgetException
+from src.nivelesPerfiles.PerfilActivacion import PerfilActivacion
+from src.nivelesPerfiles.NivelSeveridad import NivelSeveridad
 
 class ManejadorBD(object):
     """
@@ -65,6 +67,28 @@ class ManejadorBD(object):
         c= Consultas()
         cursor= conexion.cursor()
         cursor.execute(c.selectNroSeriePlaca())
+        resultado= cursor.fetchone()
+        cursor.close()
+        return resultado[0]
+    
+    def obtenerPeriodicidadLecturasPlaca(self, conexion):
+        """
+        Devuelve el número de serie de la placa, como un String
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectPeriodicidadLecturaPlaca())
+        resultado= cursor.fetchone()
+        cursor.close()
+        return resultado[0]
+    
+    def obtenerPeriodicidadNivelesPlaca(self, conexion):
+        """
+        Devuelve el número de serie de la placa, como un String
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectPeriodicidadNivelesPlaca())
         resultado= cursor.fetchone()
         cursor.close()
         return resultado[0]
@@ -243,6 +267,48 @@ class ManejadorBD(object):
         cursor.close()
         return lista
     
+    def obtenerListaNivelesSeveridad(self, conexion):
+        """
+        Devuelve una lista con todos los niveles de severidad activos en el sistema
+        """
+        lista= list()
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectObtenerNivelesSeveridad())
+        for fila in cursor:
+            idNivel= fila[0]
+            nombre= fila[1]
+            idFactor= fila[2]
+            prioridad= fila[3]
+            rangoMinimo= fila[4]
+            rangoMaximo= fila[5]
+            idPerfilActivacion= fila[6]
+            perfilActivacion= PerfilActivacion(idPerfilActivacion, None)
+            activoSistema= fila[7]
+            nivel= NivelSeveridad(idNivel, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo, perfilActivacion, activoSistema)
+            lista.append(nivel)
+        cursor.close()
+        return lista
+    
+    def obtenerListaIdGruposActuadoresEstadosPerfil(self, conexion, idPerfil):
+        """
+        Obtiene una lista de tuplas compuestas por el id del grupo de actuadores y el estado que se pretende del mismo
+        dentro del perfil de activación
+        """
+        lista= list()
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectIdGruposActuadoresEstadosActivosPerfil(), (idPerfil,))
+        for fila in cursor:
+            idGrupoActuadores= fila[0]
+            estado= fila[1]
+            tupla= (idGrupoActuadores, estado)
+            lista.append(tupla)
+        cursor.close()
+        return lista
+    
+    
+    
     def cambiarEstadoActuador(self, conexion, actuador):
         c= Consultas()
         cursor= conexion.cursor()
@@ -272,24 +338,68 @@ class ManejadorBD(object):
         """
         return None
     
-    def insertarSensor(self, conexion, sensor):
+    def insertarSensor(self, conexion, idDispositivo, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
         """
         Inserta un sensor en la base de datos, recibe como parámetros la conexión a la base y el sensor a insertar.
         """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertSensor(), (idDispositivo, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor))
+        cursor.close()  
         return None
     
-    def insertarActuador(self, conexion, actuador):
+    def insertarTipoPlaca(self, conexion, nombre):
+        """
+        Inserta un tipo de placa en la base de datos y devuelve su id.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertTipoPlaca(), (nombre,))
+        cursor.close()  
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoTipoPlaca())
+        resultado= cursor.fetchone()
+        cursor.close()        
+        return resultado[0]
+        return None
+    
+    def insertarTipoActuador(self, conexion, nombre):
+        """
+        Inserta un tipo de actuador en la base de datos y devuelve su id.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertTipoActuador(), (nombre,))
+        cursor.close()  
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoTipoActuador())
+        resultado= cursor.fetchone()
+        cursor.close()        
+        return resultado[0]
+        return None
+    
+    def insertarActuador(self, conexion, idDispositivo, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
         """
         Inserta un actuador en la base de datos, recibe como parámetros la conexión a la base y el actuador a insertar.
         """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertActuador(), (idDispositivo, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores))
+        cursor.close()  
         return None
     
-    def cambiarEstadoPlaca(self, conexion, estado ):
+    def cambiarEstadoPlaca(self, conexion, estado):
         """
         Actualiza el estado del sistema.
         Estos puede ser: I=Inactivo, C=Configuración, M=Manual o A=Automático
         """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateEstadoPlaca(), (estado,))
         return None
+
     
     def existeSensor(self, conexion, idSensor):
         """
@@ -307,11 +417,15 @@ class ManejadorBD(object):
         """
         return None
     
-    def insertarPlacaAuxiliar(self, conexion, placaAuxiliar):
+    def insertarPlacaAuxiliar(self, conexion, idDispositivo, nroSerie, idTipoPlaca, idPlacaPadre):
         """
         Inserta una placa auxiliar en la base de datos.
         Recibe como parámetros la conexión a la base y la placa auxiliar a insertar.
         """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertPlacaAuxiliar(), (idDispositivo, nroSerie, idTipoPlaca, idPlacaPadre))
+        cursor.close()  
         return None
     
     def existePlacaAuxiliar(self, conexion, idActuador):
@@ -353,6 +467,17 @@ class ManejadorBD(object):
         cursor.close()        
         return None
     
+    def insertarLecturaFactor(self, conexion, idFactor, fecha, lectura):
+        """
+        Inserta en base de datos una lectura de un factor.
+        Recibe como parámetros la conexión a la base el id de dispositivo del sensor y la lectura obtenida
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertLecturaFactor(), (idFactor, fecha, lectura))
+        cursor.close()        
+        return None
+    
     def obtenerLecturasFactorFecha(self, conexion, idFactor, fechaMin, fechaMax):
         """
         Obtiene todas las lecturas pertenecientes al factor pasado como parámetro entre las fechas
@@ -368,8 +493,14 @@ class ManejadorBD(object):
         Recibe como parámetros la conexión a la base, el id del factor y el número de lecturas a obtener
         Devuelve una lista de resultado de lecturas
         """
-        
-        return None
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectLecturasPorCantidad(), (idFactor, numeroLecturas))
+        listaValoresLecturas= list()
+        for lectura in cursor:
+            listaValoresLecturas.append(lectura[0])
+        cursor.close()   
+        return listaValoresLecturas
     
     def insertarAccionActuador(self, conexion, idActuador, accion):
         """
@@ -383,12 +514,36 @@ class ManejadorBD(object):
         return None
 
     
-    def insertarFactor(self, conexion, factor):
+    def insertarFactor(self, conexion, nombre, unidad, valorMin, valorMax):
         """
         Inserta en la base de datos un factor pasado como parámetro.
         Recibe como parámetros la conexión a la base y el factor a insertar
         """
-        return None
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertFactor(), (nombre, unidad, valorMin, valorMax, 'S'))
+        cursor.close()
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoFactor())
+        resultado= cursor.fetchone()
+        cursor.close()        
+        return resultado[0]
+    
+    def insertarDispositivo(self, conexion, nombre, modelo, nroPuerto):
+        """
+        Inserta en la base de datos un dispositivo, creado con los atributos pasados como parámetros.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertDispositivo(), (nombre, modelo, nroPuerto, 'S'))
+        cursor.close()
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoDispositivo())
+        resultado= cursor.fetchone()
+        cursor.close()        
+        return resultado[0]
     
     def eliminadoLogicoFactor(self, conexion, idFactor):
         """
@@ -416,12 +571,22 @@ class ManejadorBD(object):
         """
         return None
     
-    def insertarGrupoActuadores(self, conexion, grupoActuadores):
+    def insertarGrupoActuadores(self, conexion, nombre):
         """
         Inserta en la base de datos un grupo de actuadores pasado como parámetro.
         Recibe como parámetros la conexión a la base y el grupo de actuadores a insertar.
         """
-        return None
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertGrupoActuadores(), (nombre,))
+        cursor.close()
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoGrupoActuadores())
+        resultado= cursor.fetchone()
+        cursor.close()        
+        return resultado[0]
+
     
     def eliminadoLogicoGrupoActuadores(self, conexion, idGrupoActuadores):
         """

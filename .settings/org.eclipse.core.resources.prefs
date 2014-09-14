@@ -24,3 +24,6 @@ encoding//src/placa/TipoPuerto.py=utf-8
 encoding//src/recursos/Herramientas.py=utf-8
 encoding//src/recursos/Propiedades.py=utf-8
 encoding//src/ws/Comunicacion.py=utf-8
+encoding//src/ws/ResultadoAccionWS.py=utf-8
+encoding//src/ws/ResultadoCreacionWS.py=utf-8
+encoding//src/ws/ResultadoLecturaWS.py=utf-8

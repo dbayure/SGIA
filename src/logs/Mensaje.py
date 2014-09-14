@@ -7,7 +7,6 @@ class Mensaje(ClassSerializer):
     Clase utilizada para centralizar el manejo de mensajes del sistema.
     Sus atributos son un id de mensaje, un tipo y su texto.
     """
-    #__type_name__='Mensaje'
     class types:
         idMensaje=Integer
         tipo=String
@@ -64,14 +63,3 @@ class Mensaje(ClassSerializer):
         Asigna un String como texto del mensaje
         """
         self.texto = value
-
-    #idMensaje = property(get_id_mensaje, set_id_mensaje, None, None)
-    #tipo = property(get_tipo, set_tipo, None, None)
-    #texto = property(get_texto, set_texto, None, None)
-    
-    
-
-
-
-    
-        

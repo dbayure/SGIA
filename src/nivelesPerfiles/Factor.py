@@ -14,6 +14,7 @@ class Factor(object):
     __unidad=None
     __valorMin= None
     __valorMax= None
+    __periodicidad= None
     __listaSensores= None
     __activoSistema= None
 

@@ -11,26 +11,34 @@ class Placa(object):
     
     __nroSerie=None
     __estadoSistema=None
+    __periodicidadLecturas= None
+    __periodicidadNiveles= None
     __listaDispositivos=None
     __listaGrupoActuadores=None
     __listaFactores= None
+    __listaNivelesSeveridad= None
     __ik= None
     
     
-    def __init__(self, nroSerie, estadoSistema, listaDispositivos, listaGrupoActuadores, listaFactores):
+    def __init__(self, nroSerie, estadoSistema, periodicidadLecturas, periodicidadNiveles, listaDispositivos, listaGrupoActuadores, listaFactores, listaNivelesSeveridad):
         """
         Constructor de la clase placa, recibe como parámetros:
             -nroSerie : String
-            -estadoSistema: Char(1), estos pueden ser: I=Inactivo, C=Configuración, M=Manual o A=Automático 
+            -estadoSistema: Char(1), estos pueden ser: I=Inactivo, C=Configuración, M=Manual o A=Automático
+            -periodicidadLecturas: int (segundos)
+            -periodicidadNiveles: int (segundos)
             -listaDispositivos: List<Dispositivo>
             -listaGrupoActuadores: List<GrupoActuadores>
             -listaFactores: List<Factor>
         """
         self.__nroSerie = nroSerie
         self.__estadoSistema = estadoSistema
+        self.__periodicidadLecturas= periodicidadLecturas
+        self.__periodicidadNiveles= periodicidadNiveles
         self.__listaDispositivos = listaDispositivos
         self.__listaGrupoActuadores = listaGrupoActuadores
         self.__listaFactores = listaFactores
+        self.__listaNivelesSeveridad= listaNivelesSeveridad
         
  
 
@@ -127,6 +135,28 @@ class Placa(object):
     def __del__(self):
         if self.__ik <> None:
             self.cerrarIK() 
+            
+    def get_lista_niveles_severidad(self):
+        return self.__listaNivelesSeveridad
+
+
+    def set_lista_niveles_severidad(self, value):
+        self.__listaNivelesSeveridad = value
+        
+    def get_periodicidad_lecturas(self):
+        return self.__periodicidadLecturas
+
+
+    def get_periodicidad_niveles(self):
+        return self.__periodicidadNiveles
+
+
+    def set_periodicidad_lecturas(self, value):
+        self.__periodicidadLecturas = value
+
+
+    def set_periodicidad_niveles(self, value):
+        self.__periodicidadNiveles = value
 
     nroSerie = property(get_nro_serie, set_nro_serie, None, None)
     estadoSistema = property(get_estado_sistema, set_estado_sistema, None, None)
@@ -134,5 +164,11 @@ class Placa(object):
     listaGrupoActuadores = property(get_lista_grupo_actuadores, set_lista_grupo_actuadores, None, None)
     listaFactores = property(get_lista_factores, set_lista_factores, None, None)
     ik = property(get_ik, set_ik, None, None)
+    listaNivelesSeveridad = property(get_lista_niveles_severidad, set_lista_niveles_severidad, None, None)
+    periodicidadLecturas = property(get_periodicidad_lecturas, set_periodicidad_lecturas, None, None)
+    periodicidadNiveles = property(get_periodicidad_niveles, set_periodicidad_niveles, None, None)
+    
+
+    
 
         
