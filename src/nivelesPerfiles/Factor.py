@@ -14,11 +14,11 @@ class Factor(object):
     __unidad=None
     __valorMin= None
     __valorMax= None
-    __periodicidad= None
+    __umbral= None
     __listaSensores= None
     __activoSistema= None
 
-    def __init__(self, idFactor, nombre, unidad, valorMin, valorMax, listaSensores, activoSistema):
+    def __init__(self, idFactor, nombre, unidad, valorMin, valorMax, umbral, listaSensores, activoSistema):
         """
         Constructor de la clase factor, recibe como parámetros:
         -idFactor: int
@@ -26,6 +26,7 @@ class Factor(object):
         -unidad: String
         -valorMin: int
         -valorMax: int
+        -umbral: int
         -listaSensores: List<Sensor>
         -activoSistema: Char(1)
         """
@@ -34,6 +35,7 @@ class Factor(object):
         self.__unidad = unidad
         self.__valorMin= valorMin
         self.__valorMax= valorMax
+        self.__umbral= umbral
         self.__listaSensores = listaSensores
         self.__activoSistema = activoSistema
 
@@ -56,6 +58,12 @@ class Factor(object):
         Devuelve la unidad de un factor como un String
         """
         return self.__unidad
+    
+    def get_umbral(self):
+        """
+        Devuelve el umbral de error permitido entre lecturas
+        """
+        return self.__umbral
 
 
     def get_lista_sensores(self):
@@ -91,6 +99,12 @@ class Factor(object):
         Asigna un String como unidad de un factor
         """
         self.__unidad = value
+        
+    def set_umbral(self, value):
+        """
+        Asigna el umbral de error permitido entre lecturas
+        """
+        self.__umbral= value
 
 
     def set_lista_sensores(self, value):

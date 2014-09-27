@@ -21,7 +21,7 @@ from src.bdd.ManejadorBD import ManejadorBD
 from src.recursos import Mensajes
 from soaplib.wsgi_soap import SimpleWSGISoapApp
 from soaplib.service import soapmethod
-from soaplib.serializers.primitive import String, Integer, Array
+from soaplib.serializers.primitive import String, Integer
 import threading
 from src.ws.ResultadoLecturaWS import ResultadoLecturaWS
 from src.lecturas.Resultado import Resultado
@@ -29,7 +29,7 @@ from src.ws.ResultadoAccionWS import ResultadoAccionWS
 from src.ws.ResultadoCreacionWS import ResultadoCreacionWS
 import math
 import time
-
+from src.placa.ActuadorAvance import ActuadorAvance
 
 __placa=None
 __ws=None
@@ -62,13 +62,25 @@ def iniciarPlaca():
     listaGrupoActuadores= mbd.obtenerListaGrupoActuadores(con)
     for grupo in listaGrupoActuadores:
         idGrupoActuadores= grupo.get_id_grupo_actuador()
+        deAvance= grupo.get_de_avance()
         listaActuadores= list()
-        listaIdActuadores=mbd.obtenerListaIdActuadoresGrupo(con, idGrupoActuadores)
+        listaIdActuadores=mbd.obtenerListaIdActuadoresGrupo(con, idGrupoActuadores, deAvance)
         for idActuador in listaIdActuadores:
             actuador= obtenerDispositivoSegunId(listaDispositivos, idActuador)
-            
             if actuador <> None:
                 listaActuadores.append(actuador)
+            if isinstance(actuador, (ActuadorAvance)):
+                #Se carga la lista de posiciones de este actuador de avance
+                listaPosiciones= actuador.get_lista_posiciones()
+                for posicion in listaPosiciones:
+                    idPosicion= posicion.get_posicion()
+                    listaIdSensores= mbd.obtenerListaIdSensoresPosicion(con, actuador.get_id_dispositivo(), idPosicion)
+                    listaSensores= list()
+                    for idSensor in listaIdSensores:
+                        sensor= obtenerDispositivoSegunId(listaDispositivos, idSensor)
+                        listaSensores.append(sensor)
+                    posicion.set_lista_sensores(listaSensores)
+      
         grupo.set_lista_actuadores(listaActuadores)
     
     #aca la lista de grupos de actuadores ya está actualizada con la lista de actuadores de cada una 
@@ -114,19 +126,18 @@ def iniciarPlaca():
     return placa
 
 def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
-    actuador=None
+    dispositivo=None
     i=0
     control= False
-    while i < len(listaDispositivos) and (idDispositivo <>listaDispositivos[i].get_id_dispositivo()) and control == False:
+    while i < len(listaDispositivos) and (idDispositivo <> listaDispositivos[i].get_id_dispositivo()) and control == False:
         if isinstance(listaDispositivos[i], (PlacaAuxiliar)):
-            actuador=obtenerDispositivoSegunId(listaDispositivos[i].get_lista_dispositivos(), idDispositivo)
-        if actuador <> None:
+            dispositivo=obtenerDispositivoSegunId(listaDispositivos[i].get_lista_dispositivos(), idDispositivo)
+        if dispositivo <> None:
             control= True
         i= i+1
     if i < len(listaDispositivos) and control == False:
-        actuador= listaDispositivos[i]
-    return actuador
-
+        dispositivo= listaDispositivos[i]
+    return dispositivo
 
 class iniciarWS(threading.Thread):
     def __init__(self):
@@ -135,7 +146,7 @@ class iniciarWS(threading.Thread):
     def run(self):
         try:
             from wsgiref.simple_server import make_server
-            server = make_server('192.168.1.44', 7789, Comunicacion())
+            server = make_server('192.168.1.43', 7789, Comunicacion())
             server.serve_forever()
         except ImportError:
             print ("Error: example server code requires Python >= 2.5")
@@ -148,6 +159,7 @@ class tomarLecturas(threading.Thread):
         placa= getPlaca()
         listaFactores= placa.get_lista_factores()
         while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+            print("Lecturas tomadas")
             for factor in listaFactores:
                 procesarLecturaFactor(factor)
             time.sleep(placa.get_periodicidad_lecturas())
@@ -159,67 +171,89 @@ class procesarNiveles(threading.Thread):
     def run(self):
         placa= getPlaca()
         listaNiveles= placa.get_lista_niveles_severidad()
-        while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
-            listaNivelesValidos= list()
-            for nivel in listaNiveles:
-                factor= nivel.get_factor()
-                idFactor= factor.get_id_factor()
-                mbd= ManejadorBD()
-                con= mbd.getConexion()
-                cantidadLecturas= placa.get_periodicidad_niveles() / placa.get_periodicidad_lecturas()
-                listaValoresLecturas=mbd.obtenerLecturasFactorCantidad(con, idFactor, cantidadLecturas)
-                cumpleNivel= analizarCumplimientoNivel(listaValoresLecturas, nivel.get_rango_minimo(), nivel.get_rango_maximo())
-                if cumpleNivel:
-                    listaNivelesValidos.append(nivel)
-            #ordenar lista por prioridad
-            listaNivelesValidos.sort()
-            """Después sacar esta salida a consola"""
-            for nivel in listaNivelesValidos:
-                print("Nivel válido: "+nivel.get_nombre()+"; prioridad: "+str(nivel.get_prioridad()))
-            """hasta acá"""
-            listaActivacion= list()
-            for nivel in listaNivelesValidos:
-                perfil= nivel.get_perfil_activacion()
-                listaGrupoActuadoresEstado= perfil.get_lista_grupo_actuadores_estado()
-                for grupoEstado in listaGrupoActuadoresEstado:
-                    i= 0
-                    while i < len(listaActivacion) and listaActivacion[i][0].get_id_grupo_actuador() <> grupoEstado[0].get_id_grupo_actuador() :
-                        i=i+1
-                    if i >= len(listaActivacion):
-                        listaActivacion.append(grupoEstado)
-            """YA TENGO TODO LO NECESARIO PARA ACTUAR SOBRE LOS GRUPOS DE ACTUADORES SEGÚN SE HAYA ESPECIFICADO EN EL 
-            PERFIL DE ACTIVACION DE CADA NIVEL DE SEVERIDAD QUE SE ESTÁ CUMPLIENDO"""
-            for grupoEstado in listaActivacion:
-                grupo= grupoEstado[0]
-                estado= grupoEstado[1]
-                if estado == 'E':
-                    encenderGrupoActuadores(grupo)
-                elif estado == 'A':
-                    apagarGrupoActuadores(grupo)
-                else:
-                    print ("Estado no válido para perfil de activación")
-                    
+        while (placa.get_estado_sistema() == 'A'):
             time.sleep(placa.get_periodicidad_niveles())
+            if (placa.get_estado_sistema() == 'A'):
+                listaNivelesValidos= list()
+                for nivel in listaNiveles:
+                    factor= nivel.get_factor()
+                    idFactor= factor.get_id_factor()
+                    mbd= ManejadorBD()
+                    con= mbd.getConexion()
+                    cantidadLecturas= placa.get_periodicidad_niveles() / placa.get_periodicidad_lecturas()
+                    listaValoresLecturas=mbd.obtenerLecturasFactorCantidad(con, idFactor, cantidadLecturas)
+                    cumpleNivel= analizarCumplimientoNivel(listaValoresLecturas, nivel.get_rango_minimo(), nivel.get_rango_maximo())
+                    if cumpleNivel:
+                        listaNivelesValidos.append(nivel)
+                #ordenar lista por prioridad
+                listaNivelesValidos.sort()
+                """Después sacar esta salida a consola"""
+                for nivel in listaNivelesValidos:
+                    print("Nivel válido: "+nivel.get_nombre()+"; prioridad: "+str(nivel.get_prioridad()))
+                """hasta acá"""
+                listaActivacion= list()
+                for nivel in listaNivelesValidos:
+                    perfil= nivel.get_perfil_activacion()
+                    listaGrupoActuadoresEstado= perfil.get_lista_grupo_actuadores_estado()
+                    for grupoEstado in listaGrupoActuadoresEstado:
+                        i= 0
+                        while i < len(listaActivacion) and listaActivacion[i][0].get_id_grupo_actuador() <> grupoEstado[0].get_id_grupo_actuador() :
+                            i=i+1
+                        if i >= len(listaActivacion):
+                            listaActivacion.append(grupoEstado)
+                """YA TENGO TODO LO NECESARIO PARA ACTUAR SOBRE LOS GRUPOS DE ACTUADORES SEGÚN SE HAYA ESPECIFICADO EN EL 
+                PERFIL DE ACTIVACION DE CADA NIVEL DE SEVERIDAD QUE SE ESTÁ CUMPLIENDO"""
+                for grupoEstado in listaActivacion:
+                    grupo= grupoEstado[0]
+                    estado= grupoEstado[1]
+                    if grupo.get_de_avance() == 'S':
+                        cambiarPosicionGrupoActuadores(grupo, int(estado))
+                    else:
+                        if estado == 'E':
+                            encenderGrupoActuadores(grupo)
+                        elif estado == 'A':
+                            apagarGrupoActuadores(grupo)
+                        else:
+                            print ("Estado no válido para perfil de activación")
+            
             
 def analizarCumplimientoNivel( listaValoresLecturas, minimo, maximo):
     cantidadLecturas= len(listaValoresLecturas)
     objetivoLecturas= int((Propiedades.porcentajeLecturasProcNiveles * cantidadLecturas) / 100)
     coincidencias= 0
     for lectura in listaValoresLecturas:
-        if lectura >= minimo and lectura <= maximo:
+        if lectura >= minimo and lectura < maximo:
             coincidencias= coincidencias +1 
     cumple= coincidencias >= objetivoLecturas
-    return cumple    
-                
-        
+    return cumple  
+
+def apagarTodo():
+    listaGruposActuadores= __placa.get_lista_grupo_actuadores()
+    for grupoActuadores in listaGruposActuadores:
+        if grupoActuadores.get_de_avance() == 'N':
+            apagarGrupoActuadores(grupoActuadores)
 
 def cambiarEstadoPlaca(estado):
-    __placa.set_estado_sistema(estado)
+    placa= getPlaca()
+    estadoActual= placa.get_estado_sistema()
+    placa.set_estado_sistema(estado)
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.cambiarEstadoPlaca(con, estado)
     con.commit()
     con.close()
+    if estado == 'I':
+        """Si paso a estado inactivo desde cualquier otro estado debo apagar todos los dispositivos"""
+        apagarTodo()
+    elif estado == 'M':
+        if estadoActual == 'I' or estadoActual == 'C':
+            __placa=iniciarPlaca()
+            iniciarHiloLecturas()
+    elif estado == 'A':
+        if estadoActual == 'I' or estadoActual == 'C':
+            __placa=iniciarPlaca()
+            iniciarHiloLecturas()
+        iniciarHiloNiveles()
     return None
 
 def chequeoPlaca(): #DESPUES
@@ -238,7 +272,6 @@ def obtenerIkPadre (dispositivo):
         return __placa.get_ik()
     else:
         return padre.get_ik()
-    
 
 def lecturaSensor(sensor):
     """Método que permite obtener una lectura de un sensor conectado a un puerto analógico o digital,
@@ -466,6 +499,15 @@ def crearActuador (nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPl
     con.commit()
     return idDispositivo
 
+def crearActuadorAvance (nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    idDispositivo=mbd.insertarDispositivo(con, nombre, modelo, nroPuerto)
+    con.commit()
+    mbd.insertarActuadorAvance(con, idDispositivo, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores)
+    con.commit()
+    return idDispositivo
+
 def crearPlacaAuxiliar (nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre):
     mbd= ManejadorBD()
     con= mbd.getConexion()
@@ -489,15 +531,36 @@ def crearTipoActuador (nombre):
     con.commit()
     return idTipoActuador
 
-def eliminarDispositivo (dispositivo): #pendiente
-    #tener en cuenta q si es una placa auxiliar hay que verificar q no tenga en su lista de dispositivos ninguno activo
+def crearNivelSeveridad (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    idNivel=mbd.insertarNivelSeveridad(con, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo)
+    con.commit()
+    con.close()
+    return idNivel
+
+def agregarFilaPerfilActivacion (idPerfilActivacion, idGrupoActuadores, estado):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.insertarFilaPerfilActivacion(con, idPerfilActivacion, idGrupoActuadores, estado)
+    con.commit()
+    con.close()
     return None
 
-def iniciarComportamientoAutomatico():
-    
+def agregarPosicionActuadorAvance (idActuadorAvance, numeroPosicion, descripcion, valor):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.insertarPosicionActuadorAvance(con, idActuadorAvance, numeroPosicion, descripcion, valor)
+    con.commit()
+    con.close()
     return None
 
-def detenerComportamientoAutomatico(control): #DESPUES
+def agregarSensorPosicionActuadorAvance (idSensor, idActuadorAvance, numeroPosicion):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.insertarSensorPosicionActuadorAvance(con, idSensor, idActuadorAvance, numeroPosicion)
+    con.commit()
+    con.close()
     return None
 
 def iniciarChequeosAutomaticos(): #DESPUES
@@ -515,7 +578,7 @@ def analizarLecturas(listaLecturas, factor):
             diferencia= lectura - promedioResto
             if diferencia < 0:
                 diferencia= diferencia * -1
-            if diferencia < Propiedades.umbralTemperatura:
+            if diferencia < factor.get_umbral():
                 lecturasOk.append(lectura)
             else:
                 print 'LECTURA FUERA DE UMBRAL PERMITIDO'
@@ -529,9 +592,13 @@ def analizarLecturas(listaLecturas, factor):
                 print 'LECTURA FUERA DE RANGO'
                 #GENERAR ALERTA LOG DE EVENTOS
         lecturasOk.append(lectura)
-    resultado= sum(lecturasOk) / len(lecturasOk) 
-    return resultado
-        
+    if len(lecturasOk) == 0:
+        print ('NINGUNA LECTURA VÁLIDA')
+        #GENERAR LOG DE EVENTO Y EMITIR ALERTA PARA VERIFICAR TODOS LOS SENSORES DEL FACTOR
+        return 'E'
+    else: 
+        resultado= sum(lecturasOk) / len(lecturasOk) 
+        return resultado
 
 def procesarLecturaFactor(factor): 
     """Método que posibilita tomar lecturas de todos los sensores pertenecientes a un factor y devuelve
@@ -552,15 +619,19 @@ def procesarLecturaFactor(factor):
             con.commit()
             con.close()
             listaLecturas.append(lectura)
-    lecturaFinal= -1
+    lecturaFinal= -999
     if len(listaLecturas) == 0:
         idMensaje= Mensajes.lecturaError
     else:
         lecturaFinal= analizarLecturas(listaLecturas, factor)
-        if lecturaFinal < factor.get_valor_min() or lecturaFinal > factor.get_valor_max():
-            idMensaje= Mensajes.lecturaFueraRango
+        if lecturaFinal == 'E':
+            lecturaFinal = -999
+            idMensaje = idMensaje= Mensajes.lecturaError
         else:
-            idMensaje= Mensajes.lecturaExitosa
+            if lecturaFinal < factor.get_valor_min() or lecturaFinal > factor.get_valor_max():
+                idMensaje= Mensajes.lecturaFueraRango
+            else:
+                idMensaje= Mensajes.lecturaExitosa
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mensaje=mbd.obtenerMensaje(con, idMensaje)
@@ -572,53 +643,266 @@ def procesarLecturaFactor(factor):
     con.close()
     return resultadoLectura
 
-def crearFactor(nombre, unidad, valorMin, valorMax):
+def crearFactor(nombre, unidad, valorMin, valorMax, umbral):
     mbd= ManejadorBD()
     con= mbd.getConexion()
-    idFactor=mbd.insertarFactor(con, nombre, unidad, valorMin, valorMax)
+    idFactor=mbd.insertarFactor(con, nombre, unidad, valorMin, valorMax, umbral)
     con.commit()
     con.close()
     return idFactor
 
-def eliminarFactor(factor):
+def crearGrupoActuadores(nombre, deAvance):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    idGrupo=mbd.insertarGrupoActuadores(con, nombre, deAvance)
+    con.commit()
+    con.close()
+    return idGrupo
+
+def eliminarFactor(idFactor):
     """
     Método para realizar el eliminado lógico de un factor del sistema
     """
     #falta controlar que para cada sensor perteneciente a la lista del factor este no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
-    idFactor= factor.get_id_factor()
-    mbd.eliminadoLogicoGrupoActuadores(con, idFactor)
+    mbd.eliminadoLogicoFactor(con, idFactor)
     con.commit()
     con.close()
-    factor.set_activo_sistema('N')
     return None
 
-def crearGrupoActuadores(nombre):
+def eliminarDispositivo(idDispositivo):
+    """
+    Método para realizar el eliminado lógico de un dispositivo del sistema
+    """
+    #falta controlar que para cada actuador en su lista no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
-    idGrupo=mbd.insertarGrupoActuadores(con, nombre)
+    mbd.eliminadoLogicoDispositivo(con, idDispositivo)
     con.commit()
     con.close()
-    return idGrupo
+    return None
 
-
-def eliminarGrupoActuadores(grupoActuadores):
+def eliminarGrupoActuadores(idGrupoActuadores):
     """
     Método para realizar el eliminado lógico de un grupo de actuadores del sistema
     """
     #falta controlar que para cada actuador en su lista no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
-    idGrupoActuadores= grupoActuadores.get_id_grupo_actuador()
     mbd.eliminadoLogicoGrupoActuadores(con, idGrupoActuadores)
     con.commit()
     con.close()
-    grupoActuadores.set_activo_sistema('N')
     return None
 
-def pruebaWS(idGrupo):
-    print('Desde el ws intenta llamar al id: '+str(idGrupo))
+def eliminarNivelSeveridad(idNivelSeveridad):
+    """
+    Método para realizar el eliminado lógico de un grupo de actuadores del sistema
+    """
+    #falta controlar que para cada actuador en su lista no este activo en el sistema
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.eliminadoLogicoNivelSeveridad(con, idNivelSeveridad)
+    con.commit()
+    con.close()
+    return None
+
+def eliminarFilaPerfilActivacion(idPerfil, idGrupoActuadores):
+    """
+    Método para realizar el eliminado lógico de un grupo de actuadores del sistema
+    """
+    #falta controlar que para cada actuador en su lista no este activo en el sistema
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.eliminadoLogicoFilaPerfilActivacion(con, idPerfil, idGrupoActuadores)
+    con.commit()
+    con.close()
+    return None
+
+def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
+    """
+    Método para cambiar de posicion un actuador de avance
+    """
+    posicionActual= actuadorAvance.get_posicion()
+    if nroDestino > posicionActual:
+        listaPosiciones= actuadorAvance.get_lista_posiciones()
+        i= 0
+        while i< len(listaPosiciones) and nroDestino <> listaPosiciones[i].get_posicion() :
+            i= i+1
+        if i < len(listaPosiciones):
+            posicionDestino= listaPosiciones[i]
+            listaSensores= posicionDestino.get_lista_sensores()
+            ik= obtenerIkPadre (actuadorAvance)
+            if ik <> None:
+                tiempoInicial= time.time()
+                expiroTiempo= False
+                nroSaltos= nroDestino - posicionActual
+                ik.setOutputState(actuadorAvance.get_numero_puerto(), 1) 
+                detener= False
+                while (detener == False):
+                    control= True
+                    j=0
+                    while j<len(listaSensores) and control :
+                        sensor= listaSensores[j]
+                        j=j+1
+                        lectura= lecturaSensor(sensor)
+                        
+                        tipoPuerto= sensor.get_tipo_puerto()
+                        if tipoPuerto.get_nombre() == "analogico":
+                            control= lectura == posicionDestino.get_valor()
+                        else:
+                            control= lectura
+                    if control == True:
+                        detener= True
+                    tiempoActual= time.time()
+                    diferenciaTiempo=int(tiempoActual-tiempoInicial)
+                    if diferenciaTiempo >= (actuadorAvance.get_tiempo_entre_posiciones() * nroSaltos):
+                        detener=True
+                        expiroTiempo= True
+                    
+                ik.setOutputState(actuadorAvance.get_numero_puerto(), 0)
+                if expiroTiempo:
+                    print("Expiro el tiempo máximo para completar el movimiento")
+                    #generar log de eventos
+                    return 'F'
+                else:
+                    actuadorAvance.set_posicion(nroDestino)
+                    mbd= ManejadorBD()
+                    con= mbd.getConexion()
+                    mbd.cambiarPosicionActuadorAvance(con, actuadorAvance)
+                    con.commit()
+                    con.close()
+                    return nroDestino
+            else:
+                print("No puede instanciar el padre")
+                #Lanzar alerta y generar log de evento
+                return 'F'
+        else:
+            print ("El actuador de avance no tiene esa posicion")
+            #generar error en log de evento
+            return 'F'
+    elif nroDestino < posicionActual:
+        listaPosiciones= actuadorAvance.get_lista_posiciones()
+        i= 0
+        while i< len(listaPosiciones) and nroDestino <> listaPosiciones[i].get_posicion() :
+            i= i+1
+        if i < len(listaPosiciones):
+            posicionDestino= listaPosiciones[i]
+            listaSensores= posicionDestino.get_lista_sensores()
+            ik= obtenerIkPadre (actuadorAvance)
+            if ik <> None:
+                tiempoInicial= time.time()
+                expiroTiempo= False
+                nroSaltos= posicionActual - nroDestino
+                ik.setOutputState(actuadorAvance.get_numero_puerto_retroceso(), 1) 
+                detener= False
+                while (detener == False):
+                    control= True
+                    j=0
+                    while j<len(listaSensores) and control :
+                        sensor= listaSensores[j]
+                        j= j+1
+                        lectura= lecturaSensor(sensor)
+                        tipoPuerto= sensor.get_tipo_puerto()
+                        if tipoPuerto.get_nombre() == "analogico":
+                            control= lectura == posicionDestino.get_valor()
+                        else:
+                            control= lectura
+                    if control==True:
+                        detener= True
+                    tiempoActual= time.time()
+                    diferenciaTiempo=int(tiempoActual-tiempoInicial)
+                    
+                    if diferenciaTiempo >= (actuadorAvance.get_tiempo_entre_posiciones() * nroSaltos):
+                        detener=True
+                        expiroTiempo= True
+                #q no lo cambie        
+                ik.setOutputState(actuadorAvance.get_numero_puerto_retroceso(), 0)
+                if expiroTiempo:
+                    print("Expiro el tiempo máximo para completar el movimiento")
+                    #generar log de eventos
+                    return 'F'
+                else:
+                    actuadorAvance.set_posicion(nroDestino)
+                    mbd= ManejadorBD()
+                    con= mbd.getConexion()
+                    mbd.cambiarPosicionActuadorAvance(con, actuadorAvance)
+                    con.commit()
+                    con.close()
+                    return nroDestino
+            else:
+                print("No puede instanciar el padre")
+                #Lanzar alerta y generar log de evento
+                return 'F'
+        else:
+            print ("El actuador de avance no tiene esa posicion")
+            #generar error en log de evento
+            return 'F'
+            
+def cambiarPosicionGrupoActuadores(grupo, nroPosicion):
+    """
+    Método para apagar un grupo de actuadores
+    """
+    listaAcciones= list()
+    listaActuadores= grupo.get_lista_actuadores()
+    for actuadorAvance in listaActuadores:
+        posicionActual= actuadorAvance.get_posicion()
+        if posicionActual <> nroPosicion:
+            estadoActuador=cambiarPosicionActuadorAvance(actuadorAvance, nroPosicion)
+            if estadoActuador == 'F':
+                print('ERROR APAGADO ACTUADOR')
+                #EMITIR ALERTA Y GENERAR LOG DE EVENTO
+            else:
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                idActuador= actuadorAvance.get_id_dispositivo()
+                mbd.insertarAccionActuador(con, idActuador, str(estadoActuador))
+                con.commit()
+                con.close()
+            listaAcciones.append(estadoActuador)
+    if len(listaAcciones) == 0:
+        #todos los actuadores ya estaban en la posicion destino
+        idMensaje=Mensajes.actuadoresEnPosicion
+    else:
+        error= True
+        i=0
+        while i<len(listaAcciones) and error:
+            error= listaAcciones[i] == 'F'
+            i= i+1
+        if error == True:
+            #falló el movimiento de todos los dispositivos
+            idMensaje= Mensajes.movimientoGrupoError
+        else:
+            exito= True
+            i=0
+            while i<len(listaAcciones) and exito:
+                exito= listaAcciones[i] == nroPosicion
+                i= i+1
+            if exito == True:
+                #se acambio la posición de todos los dispositivos del grupo de actuadores
+                idMensaje= Mensajes.movimientoGrupoOk
+                grupo.set_estado(str(nroPosicion))
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                mbd.cambiarEstadoGrupoActuadores(con, grupo)
+                con.commit()
+                con.close()
+            else:
+                #el grupo de actuadores cambió de posición parcialmente
+                idMensaje=Mensajes.movimientoGrupoParcial
+                grupo.set_estado(str(nroPosicion))
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                mbd.cambiarEstadoGrupoActuadores(con, grupo)
+                con.commit()
+                con.close()
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mensaje=mbd.obtenerMensaje(con, idMensaje)
+    con.close()
+    fecha= datetime.now()
+    resultadoAccion= ResultadoAccion(mensaje, fecha, grupo.get_id_grupo_actuador(), grupo.get_estado())
+    return resultadoAccion
     
 def getPlaca():
     return __placa
@@ -639,23 +923,49 @@ def convertirResultadoAccion(resultadoAccion):
     resultado= ResultadoAccionWS(mensaje, fecha, idGrupoActuadores, tipoAccion)
     return resultado
 
+def iniciarHiloWS():
+    t = iniciarWS()
+    t.start()
+    print("WS publicado")
+    
+def iniciarHiloLecturas():    
+    t2= tomarLecturas()
+    t2.start()
+    print('Lecturas automáticas iniciadas')
+    
+def iniciarHiloNiveles():        
+    t3= procesarNiveles()
+    t3.start()
+    print('Procesado niveles iniciado')
+
 class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,_returns=ResultadoAccionWS)
     def wsEncenderGrupoActuadores(self, idGrupo):
         placa= getPlaca()
-        listaGrupoActuadores= placa.get_lista_grupo_actuadores()
-        mensaje= None
-        grupo=None
-        i=0
-        while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
-            i= i+1
-        if i < len(listaGrupoActuadores):
-            grupo= listaGrupoActuadores[i]
-            resultado=encenderGrupoActuadores(grupo)
-            resultadoWS= convertirResultadoAccion(resultado)
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'M':
+            listaGrupoActuadores= placa.get_lista_grupo_actuadores()
+            mensaje= None
+            grupo=None
+            i=0
+            while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
+                i= i+1
+            if i < len(listaGrupoActuadores):
+                grupo= listaGrupoActuadores[i]
+                resultado=encenderGrupoActuadores(grupo)
+                resultadoWS= convertirResultadoAccion(resultado)
+            else:
+                idMensaje= Mensajes.noExisteGrupoActuadores
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                mensaje=mbd.obtenerMensaje(con, idMensaje)
+                con.close()
+                fecha= datetime.now()
+                tipoAccion= ""
+                resultadoWS= ResultadoAccionWS(mensaje, fecha, idGrupo, tipoAccion)
         else:
-            idMensaje= Mensajes.noExisteGrupoActuadores
+            idMensaje= Mensajes.estadoSistemaNoEsManual
             mbd= ManejadorBD()
             con= mbd.getConexion()
             mensaje=mbd.obtenerMensaje(con, idMensaje)
@@ -668,19 +978,66 @@ class Comunicacion(SimpleWSGISoapApp):
     @soapmethod(Integer,_returns=ResultadoAccionWS)
     def wsApagarGrupoActuadores(self, idGrupo):
         placa= getPlaca()
-        listaGrupoActuadores= placa.get_lista_grupo_actuadores()
-        mensaje= None
-        grupo=None
-    
-        i=0
-        while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
-            i= i+1
-        if i < len(listaGrupoActuadores):
-            grupo= listaGrupoActuadores[i]
-            resultado=apagarGrupoActuadores(grupo)
-            resultadoWS= convertirResultadoAccion(resultado)
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'M':
+            listaGrupoActuadores= placa.get_lista_grupo_actuadores()
+            mensaje= None
+            grupo=None
+        
+            i=0
+            while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
+                i= i+1
+            if i < len(listaGrupoActuadores):
+                grupo= listaGrupoActuadores[i]
+                resultado=apagarGrupoActuadores(grupo)
+                resultadoWS= convertirResultadoAccion(resultado)
+            else:
+                idMensaje= Mensajes.noExisteGrupoActuadores
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                mensaje=mbd.obtenerMensaje(con, idMensaje)
+                con.close()
+                fecha= datetime.now()
+                tipoAccion= ""
+                resultadoWS= ResultadoAccionWS(mensaje, fecha, idGrupo, tipoAccion)
         else:
-            idMensaje= Mensajes.noExisteGrupoActuadores
+            idMensaje= Mensajes.estadoSistemaNoEsManual
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+            fecha= datetime.now()
+            tipoAccion= ""
+            resultadoWS= ResultadoAccionWS(mensaje, fecha, idGrupo, tipoAccion)
+        return resultadoWS
+    
+    @soapmethod(Integer, Integer,_returns=ResultadoAccionWS)
+    def wsCambiarPosicionGrupoActuadores(self, idGrupo, nroPosicion):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'M':
+            listaGrupoActuadores= placa.get_lista_grupo_actuadores()
+            mensaje= None
+            grupo=None
+        
+            i=0
+            while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
+                i= i+1
+            if i < len(listaGrupoActuadores):
+                grupo= listaGrupoActuadores[i]
+                resultado=cambiarPosicionGrupoActuadores(grupo, nroPosicion)
+                resultadoWS= convertirResultadoAccion(resultado)
+            else:
+                idMensaje= Mensajes.noExisteGrupoActuadores
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                mensaje=mbd.obtenerMensaje(con, idMensaje)
+                con.close()
+                fecha= datetime.now()
+                tipoAccion= ""
+                resultadoWS= ResultadoAccionWS(mensaje, fecha, idGrupo, tipoAccion)
+        else:
+            idMensaje= Mensajes.estadoSistemaNoEsManual
             mbd= ManejadorBD()
             con= mbd.getConexion()
             mensaje=mbd.obtenerMensaje(con, idMensaje)
@@ -693,18 +1050,29 @@ class Comunicacion(SimpleWSGISoapApp):
     @soapmethod(Integer,_returns=ResultadoLecturaWS)
     def wsLecturaFactor(self, idFactor):
         placa= getPlaca()
-        listaFactores= placa.get_lista_factores()
-        mensaje= None
-        factor=None
-        i=0
-        while i < len(listaFactores) and idFactor <> listaFactores[i].get_id_factor():
-            i= i+1
-        if i < len(listaFactores):
-            factor= listaFactores[i]
-            resultado=procesarLecturaFactor(factor)
-            resultadoWS= convertirResultadoLectura(resultado)
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'M' or estadoSistema == 'A':
+            listaFactores= placa.get_lista_factores()
+            mensaje= None
+            factor=None
+            i=0
+            while i < len(listaFactores) and idFactor <> listaFactores[i].get_id_factor():
+                i= i+1
+            if i < len(listaFactores):
+                factor= listaFactores[i]
+                resultado=procesarLecturaFactor(factor)
+                resultadoWS= convertirResultadoLectura(resultado)
+            else:
+                idMensaje= Mensajes.noExisteFactor
+                mbd= ManejadorBD()
+                con= mbd.getConexion()
+                mensaje=mbd.obtenerMensaje(con, idMensaje)
+                con.close()
+                fecha= datetime.now()
+                valor= 0
+                resultadoWS=ResultadoLecturaWS(mensaje, fecha, idFactor, valor)
         else:
-            idMensaje= Mensajes.noExisteFactor
+            idMensaje= Mensajes.estadoSistemaNoManualNiAutomatico
             mbd= ManejadorBD()
             con= mbd.getConexion()
             mensaje=mbd.obtenerMensaje(con, idMensaje)
@@ -724,107 +1092,361 @@ class Comunicacion(SimpleWSGISoapApp):
         con.close()
         return mensaje
     
-    @soapmethod(String, String, Integer, Integer, _returns=ResultadoCreacionWS)
-    def wsCrearFactor(self, nombre, unidad, valorMin, valorMax):
-        idFactor= crearFactor(nombre, unidad, valorMin, valorMax)
-        idMensaje= Mensajes.factorCreadoOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+    @soapmethod(String, String, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
+    def wsCrearFactor(self, nombre, unidad, valorMin, valorMax, umbral):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idFactor= crearFactor(nombre, unidad, valorMin, valorMax, umbral)
+            idMensaje= Mensajes.factorCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idFactor)
         return resultado
     
-    @soapmethod(String, _returns=ResultadoCreacionWS)
-    def wsCrearGrupoActuadores(self, nombre):
-        idGrupo= crearGrupoActuadores(nombre)
-        idMensaje= Mensajes.grupoActuadoresCreadoOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+    @soapmethod(String, String, _returns=ResultadoCreacionWS)
+    def wsCrearGrupoActuadores(self, nombre, deAvance):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idGrupo= crearGrupoActuadores(nombre, deAvance)
+            idMensaje= Mensajes.grupoActuadoresCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idGrupo)
         return resultado
     
-    @soapmethod(String, _returns=ResultadoCreacionWS)
+    @soapmethod(String, String, Integer, String, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearSensor(self, nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
-        idSensor= crearSensor(nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor)
-        idMensaje= Mensajes.sensorCreadoOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idSensor= crearSensor(nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor)
+            idMensaje= Mensajes.sensorCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idSensor)
         return resultado
     
     @soapmethod(String,String, Integer, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearActuador(self, nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
-        idActuador= crearActuador(nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores)
-        idMensaje= Mensajes.actuadorCreadoOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        idActuador= 0
+        if estadoSistema == 'C':
+            idActuador= crearActuador(nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores)
+            idMensaje= Mensajes.actuadorCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idActuador)
         return resultado
     
     @soapmethod(String, _returns=ResultadoCreacionWS)
     def wsCrearTipoPlaca(self, nombre):
-        idTipoPlaca= crearTipoPlaca(nombre)
-        idMensaje= Mensajes.tipoPlacaCreadaOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idTipoPlaca= crearTipoPlaca(nombre)
+            idMensaje= Mensajes.tipoPlacaCreadaOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idTipoPlaca)
         return resultado
     
     @soapmethod(String, _returns=ResultadoCreacionWS)
     def wsCrearTipoActuador(self, nombre):
-        idTipoActuador= crearTipoActuador(nombre)
-        idMensaje= Mensajes.tipoActuadorCreadoOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idTipoActuador= crearTipoActuador(nombre)
+            idMensaje= Mensajes.tipoActuadorCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idTipoActuador)
         return resultado
     
     @soapmethod(String,String, Integer, String, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearPlacaAuxiliar(self, nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre):
-        idPlacaAuxiliar= crearPlacaAuxiliar(nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre)
-        idMensaje= Mensajes.placaAuxiliarCreadaOk
-        mbd= ManejadorBD()
-        con= mbd.getConexion()
-        mensaje=mbd.obtenerMensaje(con, idMensaje)
-        con.close()
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idPlacaAuxiliar= crearPlacaAuxiliar(nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre)
+            idMensaje= Mensajes.placaAuxiliarCreadaOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
         resultado= ResultadoCreacionWS(mensaje, idPlacaAuxiliar)
         return resultado
     
+    @soapmethod(String, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
+    def wsCrearNivelSeveridad(self, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idNivel= crearNivelSeveridad(nombre, idFactor, prioridad, rangoMinimo, rangoMaximo)
+            idMensaje= Mensajes.nivelSeveridadCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        resultado= ResultadoCreacionWS(mensaje, idNivel)
+        return resultado
     
-        
+    @soapmethod(Integer, Integer, String, _returns=ResultadoCreacionWS)
+    def wsAgregarFilaPerfilActivacion(self, idPerfilActivacion, idGrupoActuadores, estado):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            agregarFilaPerfilActivacion(idPerfilActivacion, idGrupoActuadores, estado)
+            idMensaje= Mensajes.filaPerfilActivacionAgregadaOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        resultado= ResultadoCreacionWS(mensaje, idPerfilActivacion)
+        return resultado
     
+    @soapmethod(String,String, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
+    def wsCrearActuadorAvance(self, nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idActuadorAvance= crearActuadorAvance(nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores)
+            idMensaje= Mensajes.actuadorAvanceCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        resultado= ResultadoCreacionWS(mensaje, idActuadorAvance)
+        return resultado
+    
+    @soapmethod(Integer, Integer, String, Integer, _returns=ResultadoCreacionWS)
+    def wsAgregarPosicionActuadorAvance(self, idActuadorAvance, numeroPosicion, descripcion, valor):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            agregarPosicionActuadorAvance(idActuadorAvance, numeroPosicion, descripcion, valor)
+            idMensaje= Mensajes.posicionActuadorAvanceOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        resultado= ResultadoCreacionWS(mensaje, numeroPosicion)
+        return resultado
+    
+    @soapmethod(Integer, Integer, Integer, _returns=ResultadoCreacionWS)
+    def wsAgregarSensorPosicionActuadorAvance(self, idSensor, idActuadorAvance, numeroPosicion):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            agregarSensorPosicionActuadorAvance(idSensor, idActuadorAvance, numeroPosicion)
+            idMensaje= Mensajes.sensorPosicionActuadorAvanceOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        resultado= ResultadoCreacionWS(mensaje, idSensor)
+        return resultado
+    
+    @soapmethod(Integer, _returns=Mensaje)
+    def wsEliminarDispositivo(self, idDispositivo):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            eliminarDispositivo(idDispositivo)
+            idMensaje= Mensajes.dispositivoEliminadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(Integer, _returns=Mensaje)
+    def wsEliminarFactor(self, idFactor):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            eliminarFactor(idFactor)
+            idMensaje= Mensajes.factorEliminadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(Integer, _returns=Mensaje)
+    def wsEliminarGrupoActuadores(self, idGrupoActuadores):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            eliminarGrupoActuadores(idGrupoActuadores)
+            idMensaje= Mensajes.grupoActuadoresEliminadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(Integer, _returns=Mensaje)
+    def wsEliminarNivelSeveridad(self, idNivelSeveridad):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            eliminarNivelSeveridad(idNivelSeveridad)
+            idMensaje= Mensajes.nivelSeveridadEliminadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(Integer, Integer, _returns=Mensaje)
+    def wsEliminarFilaPerfilActivacion(self, idPerfil, idGrupoActuadores):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            eliminarFilaPerfilActivacion(idPerfil, idGrupoActuadores)
+            idMensaje= Mensajes.filaPerfilActivacionEliminadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
 
 if __name__ == '__main__':
     __placa=iniciarPlaca()
-    t = iniciarWS()
-    t.start()
-    t2= tomarLecturas()
-    t2.start()
-    time.sleep(__placa.get_periodicidad_niveles())
-    t3= procesarNiveles()
-    t3.start()
+    iniciarHiloWS()
+    estado= __placa.get_estado_sistema()
+    if estado == 'M' or estado == 'A':
+        iniciarHiloLecturas()
+    if estado == 'A':
+        iniciarHiloNiveles()
+
+    """threading.activeCount()
     
-    threading.activeCount()
-    """
-    h= Herramientas()
+    h= Herramientas() 
     listaFactores= __placa.get_lista_factores()
     for factor in listaFactores:
         resultado=procesarLecturaFactor(factor)
         print ('Factor: '+str(resultado.get_id_factor()) +'; '+factor.get_nombre())
         print (resultado.get_mensaje().get_texto())
         print ('Fecha: '+str(resultado.get_fecha()))
-        print ('Valor: '+str(resultado.get_valor()) +' '+factor.get_unidad())
+        print ('Valor: '+str(resultado.get_valor()) +' '+factor.get_unidad()) 
     listaGrupo= __placa.get_lista_grupo_actuadores()
     for grupo in listaGrupo:
         print('Estado actual del grupo: '+ grupo.get_estado() )
@@ -854,13 +1476,44 @@ if __name__ == '__main__':
         for grupoEstado in listaGrupoEstado:
             grupo= grupoEstado[0]
             estado= grupoEstado[1]
-            print("Grupo: "+grupo.get_nombre() +", Estado: "+ estado)
+            print("Grupo: "+grupo.get_nombre() +", Estado: "+ estado) """
+    
+    
     """
-  
-            
-    
-            
-            
-    
-    
+    listaGrupo= __placa.get_lista_grupo_actuadores()
+    for grupo in listaGrupo:
+        print("Grupo: "+grupo.get_nombre())
+        if grupo.get_de_avance() == 'S':
+            resultado=cambiarPosicionGrupoActuadores(grupo, 1)
+            print('Grupo Actuadores: '+str(resultado.get_id_grupo_actuadores())+'; '+grupo.get_nombre())
+            print(resultado.get_mensaje().get_texto())
+            print ('Fecha: '+str(resultado.get_fecha()))
+            print ('Estado: '+resultado.get_tipo_accion())
+        listaActuadores= grupo.get_lista_actuadores()
+        for actuador in listaActuadores:
+            if isinstance(actuador, (ActuadorAvance)):
+                if actuador.get_id_dispositivo() == 16:
+                    print("*************************************************Intenta prender el actuador de avance")
+                    cambiarPosicionActuadorAvance(actuador, 2)
+                
+                print("    Es un actuador de avance")
+                print("    Id: "+str(actuador.get_id_dispositivo()))
+                print("    Nombre: "+actuador.get_nombre())
+                print("    Posicion: "+str(actuador.get_posicion()))
+                print("    Tiempo entre posiciones: "+str(actuador.get_tiempo_entre_posiciones()))
+                print("    Puerto avance: "+str(actuador.get_numero_puerto()))
+                print("    Puerto retroceso: "+str(actuador.get_numero_puerto_retroceso()))
+                print("        Posiciones:")
+                listaPosiciones= actuador.get_lista_posiciones()
+                for posicion in listaPosiciones:
+                    print("        Nombre pos.: "+posicion.get_descripcion())
+                    listaSensores=posicion.get_lista_sensores()
+                    print("        Cantidad de sensores: "+str(len(listaSensores)))
+                    for sensor in listaSensores:
+                        print("            Sensores posicion:")
+                        print("            Id sensor: "+str(sensor.get_id_dispositivo()))
+                        print ("            Nombre: "+sensor.get_nombre())
+                        print ("            Puerto: "+str(sensor.get_numero_puerto()))
+                """
+
     

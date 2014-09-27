@@ -70,9 +70,27 @@ class Consultas(object):
                     and d.activoSistema = 'S'"""
         return consulta
     
+    def selectActuadoresAvanceActivosPlacaPadre(self):
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.posicion, a.idTipoPuerto, a.idTipoActuador, a.nroPuertoRetroceso,
+                    a.idTipoPuertoRetroceso, a.tiempoEntrePosiciones
+                    from actuadoresAvance a, dispositivos d
+                    where a.idDispositivo = d.idDispositivo
+                    and a.idPlacaPadre is Null
+                    and d.activoSistema = 'S'"""
+        return consulta
+    
     def selectActuadoresActivosPlacaAux(self):
         consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.estado, a.idTipoPuerto, a.idTipoActuador
                     from actuadores a, dispositivos d
+                    where a.idDispositivo = d.idDispositivo
+                    and a.idPlacaPadre = ?
+                    and d.activoSistema = 'S'"""
+        return consulta
+    
+    def selectActuadoresAvanceActivosPlacaAux(self):
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.posicion, a.idTipoPuerto, a.idTipoActuador, a.nroPuertoRetroceso,
+                    a.idTipoPuertoRetroceso, a.tiempoEntrePosiciones
+                    from actuadoresAvance a, dispositivos d
                     where a.idDispositivo = d.idDispositivo
                     and a.idPlacaPadre = ?
                     and d.activoSistema = 'S'"""
@@ -83,6 +101,20 @@ class Consultas(object):
                      from tipoActuadores
                      where idTipoActuador = ?"""
         return consulta
+    
+    def selectPosicionesActuadorAvance(self):
+        consulta= """select posicion, descripcion, valor
+                    from posiciones
+                    where idActuadorAvance = ?"""
+        return consulta
+    
+    def selectSensoresPosicion(self):
+        consulta= """select idSensorAvance
+                    from sensoresPosicion
+                    where idActuadorAvance = ?
+                        and posicion= ?"""
+        return consulta
+
     
     def selectPlacasAuxiliaresActivasPlacaPadre(self):
         consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, p.nroSerie, p.idTipoPlaca
@@ -101,7 +133,7 @@ class Consultas(object):
         return consulta
     
     def selectGruposActuadoresActivos(self):
-        consulta= """select idGrupoActuadores, estado, nombre, activoSistema
+        consulta= """select idGrupoActuadores, estado, nombre, deAvance, activoSistema
                     from gruposActuadores
                     where activoSistema = 'S'"""
         return consulta
@@ -146,7 +178,7 @@ class Consultas(object):
         return None
     
     def selectFactores(self):
-        consulta="""select idFactor, nombre, unidad, valorMin, valorMax, activoSistema
+        consulta="""select idFactor, nombre, unidad, valorMin, valorMax, umbral, activoSistema
                     from factores
                     where activoSistema= 'S'"""
         return consulta
@@ -163,7 +195,11 @@ class Consultas(object):
                     where idGrupoActuadores = ?"""
         return consulta
 
-
+    def selectIdActuadoresAvanceGrupo(self):
+        consulta="""select idDispositivo
+                    from actuadoresAvance
+                    where idGrupoActuadores = ?"""
+        return consulta
     
     def selectExisteNivelSeveridad(self):
         return None
@@ -202,11 +238,27 @@ class Consultas(object):
         consulta= "select max(idGrupoActuadores) from gruposActuadores"
         return consulta
     
+    def selectUltimoNivelSeveridad(self):
+        consulta= "select max(idNivel) from nivelesSeveridad"
+        return consulta
     
     
     def insertActuador(self):
         consulta= """insert into actuadores (idDispositivo, estado, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores, fechaAlta)
                     values (?, 'A', ?, ?, ?, ?, datetime('now', 'localtime'))"""
+        return consulta
+    
+    def insertPosicion(self):
+        consulta= "insert into posiciones (idActuadorAvance, posicion, descripcion, valor) values (?, ?, ?, ?)"
+        return consulta
+    
+    def insertSensorPosicion(self):
+        consulta= "insert into sensoresPosicion (idSensorAvance, idActuadorAvance, posicion) values (?, ?, ?)"
+        return consulta
+    
+    def insertActuadorAvance(self):
+        consulta= """insert into actuadoresAvance (idDispositivo, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, idTipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores, fechaAlta)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))"""
         return consulta
     
     def insertSensor(self):
@@ -223,8 +275,8 @@ class Consultas(object):
         return consulta
     
     def insertFactor(self):
-        consulta= """insert into factores (nombre, unidad, valorMin, valorMax, activoSistema)
-                        values (?, ?, ?, ?, ?)"""
+        consulta= """insert into factores (nombre, unidad, valorMin, valorMax, umbral, activoSistema)
+                        values (?, ?, ?, ?, ?, ?)"""
         return consulta
     
     def insertDispositivo(self):
@@ -249,14 +301,21 @@ class Consultas(object):
         return consulta
     
     def insertGrupoActuadores(self):
-        consulta= "insert into gruposActuadores (estado, nombre, activoSistema) values ('A', ?, 'S')"
+        consulta= "insert into gruposActuadores (estado, nombre, deAvance, activoSistema) values ('A', ?, 'N', 'S')"
+        return consulta
+    
+    def insertGrupoActuadoresAvance(self):
+        consulta= "insert into gruposActuadores (estado, nombre, deAvance, activoSistema) values ('1', ?, 'S', 'S')"
         return consulta
     
     def insertNivelSeveridad(self):
-        return None
+        consulta= """insert into nivelesSeveridad (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo, activoSistema)
+                        values (?, ?, ?, ?, ?, 'S')"""
+        return consulta
     
     def insertPerfilActivacion(self):
-        return None
+        consulta= "insert into perfilesActivacion (idPerfilActivacion, idGrupoActuadores, estado, activoSistema) values (?, ?, ?, 'S')"
+        return consulta
     
     def insertLogEvento(self):
         return None
@@ -269,8 +328,16 @@ class Consultas(object):
         consulta = "update gruposactuadores set estado = ? where idGrupoActuadores= ?"
         return consulta
     
+    def updateIdPerfilActivacion(self):
+        consulta = "update nivelesSeveridad set idPerfilActivacion = ? where idNivel= ?"
+        return consulta
+    
     def updateEstadoPlaca(self):
         consulta= "update parametros set estadoPlaca=?"
+        return consulta
+    
+    def updatePosicionActuadorAvance(self):
+        consulta= "update actuadoresAvance set posicion = ? where idDispositivo = ?"
         return consulta
     
     def updateActivoSistemaDispositivo(self):
@@ -286,8 +353,10 @@ class Consultas(object):
         return consulta
     
     def updateActivoSistemaNivelSeveridad(self):
-        return None
+        consulta= "update nivelesSeveridad set activoSistema = 'N' where idNivel = ?"
+        return consulta
     
     def updateActivoSistemaPerfilActivacion(self):
-        return None
+        consulta= "update perfilesActivacion set activoSistema = 'N' where idPerfilActivacion = ? and idGrupoActuadores = ?"
+        return consulta
         

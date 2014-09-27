@@ -16,6 +16,8 @@ from src.logs.Mensaje import Mensaje
 from Phidgets.PhidgetException import PhidgetException
 from src.nivelesPerfiles.PerfilActivacion import PerfilActivacion
 from src.nivelesPerfiles.NivelSeveridad import NivelSeveridad
+from src.placa.ActuadorAvance import ActuadorAvance
+from src.placa.Posicion import Posicion
 
 class ManejadorBD(object):
     """
@@ -92,6 +94,20 @@ class ManejadorBD(object):
         resultado= cursor.fetchone()
         cursor.close()
         return resultado[0]
+    
+    def __obtenerListaPosicionesActuadorAvance(self, conexion, idActuadorAvance):
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectPosicionesActuadorAvance(), (idActuadorAvance,))
+        listaPosiciones= list()
+        for fila in cursor:
+            posicion= fila[0]
+            descripcion= fila[1]
+            valor= fila[2]
+            pos= Posicion(posicion, descripcion, valor, None)
+            listaPosiciones.append(pos)
+        cursor.close()
+        return listaPosiciones
        
     def __cargarSensores(self, lista, conexion, idPadre=-1):
         c= Consultas()
@@ -148,6 +164,57 @@ class ManejadorBD(object):
             lista.append(actuador)
         return None
     
+    def __cargarActuadoresAvance(self, lista, conexion, idPadre=-1):
+        c= Consultas()
+        cursor= conexion.cursor()
+        if idPadre < 0:
+            cursor.execute(c.selectActuadoresAvanceActivosPlacaPadre())
+            
+        else:
+            cursor.execute(c.selectActuadoresAvanceActivosPlacaAux(), (idPadre,))
+        for fila in cursor:
+            idDispositivo= fila[0]
+            nombre= fila[1]
+            modelo= fila[2]
+            nroPuerto= fila[3]
+            activoSistema= fila[4]
+            posicion= fila[5]
+            idTipoPuerto=fila[6]
+            idTipoActuador=fila[7]
+            nroPuertoRetroceso=fila[8]
+            idTipoPuertoRetroceso=fila[9]
+            tiempoEntrePosiciones=fila[10]
+            cursorAux= conexion.cursor()
+            cursorAux.execute(c.selectTipoPuerto(), (idTipoPuerto,))
+            resAux= cursorAux.fetchone()
+            nombreTipoPuerto= resAux[0]
+            cursorAux.execute(c.selectTipoPuerto(), (idTipoPuertoRetroceso,))
+            resAux= cursorAux.fetchone()
+            nombreTipoPuertoRetroceso= resAux[0]
+            cursorAux.execute(c.selectTipoActuador(), (idTipoActuador,))
+            resAux= cursorAux.fetchone()
+            nombreTipoActuador= resAux[0]
+            
+            tipoPuerto= TipoPuerto(idTipoPuerto, nombreTipoPuerto)
+            tipoPuertoRetroceso= TipoPuerto(idTipoPuertoRetroceso, nombreTipoPuertoRetroceso)
+            tipoActuador= TipoActuador(idTipoActuador, nombreTipoActuador)
+            listaPosiciones= self.__obtenerListaPosicionesActuadorAvance(conexion, idDispositivo)
+            
+            actuadorAvance= ActuadorAvance(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, posicion, tipoActuador, tipoPuerto, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, listaPosiciones)
+            lista.append(actuadorAvance)
+            cursorAux.close()
+        return None
+    
+    def obtenerListaIdSensoresPosicion(self, conexion, idDispositivo, idPosicion):
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectSensoresPosicion(), (idDispositivo, idPosicion))
+        listaIds=list()
+        for fila in cursor:
+            listaIds.append(fila[0])
+        cursor.close()
+        return listaIds
+    
     def __cargarPlacasAuxiliares(self, lista, conexion, idPadre=-1):
         c= Consultas()
         cursor= conexion.cursor()
@@ -173,6 +240,7 @@ class ManejadorBD(object):
             l= list()
             self.__cargarSensores(l, conexion, idDispositivo)
             self.__cargarActuadores(l, conexion, idDispositivo)
+            self.__cargarActuadoresAvance(l, conexion, idDispositivo)
             self.__cargarPlacasAuxiliares(l, conexion, idDispositivo)
             placaAuxiliar= PlacaAuxiliar(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, nroSerie, tipoPlaca, l)
             h= Herramientas()
@@ -195,7 +263,9 @@ class ManejadorBD(object):
         self.__cargarSensores(l, conexion)
         #2. obtener lista actuadores conectados directamente a la placa controladora
         self.__cargarActuadores(l, conexion)
-        #3. obtener lista placas auxiliares
+        #3. obtener lista de actuadores de avance
+        self.__cargarActuadoresAvance(l, conexion)
+        #4. obtener lista placas auxiliares
         self.__cargarPlacasAuxiliares(l, conexion)
         return l
     
@@ -213,8 +283,9 @@ class ManejadorBD(object):
             unidad= fila[2]
             valorMin= fila[3]
             valorMax= fila[4]
-            activoSistema= fila[5]
-            factor= Factor(idFactor, nombre, unidad, valorMin, valorMax, None, activoSistema)
+            umbral= fila[5]
+            activoSistema= fila[6]
+            factor= Factor(idFactor, nombre, unidad, valorMin, valorMax, umbral, None, activoSistema)
             lista.append(factor)
         cursor.close()
         return lista
@@ -246,13 +317,14 @@ class ManejadorBD(object):
             idGrupoActuador= fila[0]
             estado= fila[1]
             nombre= fila[2]
-            activoSistema= fila[3]
-            grupo= GrupoActuadores(idGrupoActuador, estado, nombre, None, activoSistema)
+            deAvance= fila[3]
+            activoSistema= fila[4]
+            grupo= GrupoActuadores(idGrupoActuador, estado, nombre, None, deAvance, activoSistema)
             lista.append(grupo)
         cursor.close()
         return lista
         
-    def obtenerListaIdActuadoresGrupo(self, conexion, idGrupo):
+    def obtenerListaIdActuadoresGrupo(self, conexion, idGrupo, deAvance):
         """
         Devuelve la lista de id de dispositivos sensores pertenecientes al factor pasado
         como parámetro
@@ -260,10 +332,16 @@ class ManejadorBD(object):
         lista= list()
         c= Consultas()
         cursor= conexion.cursor()
-        cursor.execute(c.selectIdActuadoresGrupo(), (idGrupo,))
-        for fila in cursor:
-            idActuador= fila[0]
-            lista.append(idActuador)
+        if deAvance == 'N':
+            cursor.execute(c.selectIdActuadoresGrupo(), (idGrupo,))
+            for fila in cursor:
+                idActuador= fila[0]
+                lista.append(idActuador)
+        else:
+            cursor.execute(c.selectIdActuadoresAvanceGrupo(), (idGrupo,))
+            for fila in cursor:
+                idActuadorAvance= fila[0]
+                lista.append(idActuadorAvance)
         cursor.close()
         return lista
     
@@ -313,6 +391,13 @@ class ManejadorBD(object):
         c= Consultas()
         cursor= conexion.cursor()
         cursor.execute(c.updateEstadoActuador(), (actuador.get_estado_actuador(), actuador.get_id_dispositivo()))
+        cursor.close()    
+        return None
+    
+    def cambiarPosicionActuadorAvance(self, conexion, actuadorAvance):
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updatePosicionActuadorAvance(), (actuadorAvance.get_posicion(), actuadorAvance.get_id_dispositivo()))
         cursor.close()    
         return None
     
@@ -390,6 +475,36 @@ class ManejadorBD(object):
         cursor.close()  
         return None
     
+    def insertarActuadorAvance(self, conexion, idDispositivo, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+        """
+        Inserta un actuador en la base de datos, recibe como parámetros la conexión a la base y el actuador a insertar.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertActuadorAvance(), (idDispositivo, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores))
+        cursor.close()  
+        return None
+    
+    def insertarPosicionActuadorAvance(self, conexion, idActuadorAvance, numeroPosicion, descripcion, valor):
+        """
+        Inserta una posicion a un actuador de avance en la base de datos.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertPosicion(), (idActuadorAvance, numeroPosicion, descripcion, valor))
+        cursor.close()  
+        return None
+    
+    def insertarSensorPosicionActuadorAvance(self, conexion, idSensor, idActuadorAvance, numeroPosicion):
+        """
+        Inserta una posicion a un actuador de avance en la base de datos.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertSensorPosicion(), (idSensor, idActuadorAvance, numeroPosicion))
+        cursor.close()  
+        return None
+    
     def cambiarEstadoPlaca(self, conexion, estado):
         """
         Actualiza el estado del sistema.
@@ -435,19 +550,6 @@ class ManejadorBD(object):
         Devuelve un boolean.
         """
         return None
-    
-    def eliminadoLogicoDispositivo(self, conexion, idDispositivo):
-        """
-        Elimina lógicamente un sensor del sistema, esta operación consiste en cambiar su atributo activoSistema.
-        Recibe como parámetros la conexión a la base de datos y el id del dispositivo sensor a eliminar.
-        """
-        c= Consultas()
-        cursor= conexion.cursor()
-        cursor.execute(c.updateActivoSistemaDispositivo(), (idDispositivo,))
-        cursor.close()        
-        return None
-    
-    
     
     def eliminadoLogicoPlacaAuxiliar(self, conexion, idPlacaAuxiliar):
         """
@@ -514,14 +616,14 @@ class ManejadorBD(object):
         return None
 
     
-    def insertarFactor(self, conexion, nombre, unidad, valorMin, valorMax):
+    def insertarFactor(self, conexion, nombre, unidad, valorMin, valorMax, umbral):
         """
         Inserta en la base de datos un factor pasado como parámetro.
         Recibe como parámetros la conexión a la base y el factor a insertar
         """
         c= Consultas()
         cursor= conexion.cursor()
-        cursor.execute(c.insertFactor(), (nombre, unidad, valorMin, valorMax, 'S'))
+        cursor.execute(c.insertFactor(), (nombre, unidad, valorMin, valorMax, umbral, 'S'))
         cursor.close()
         conexion.commit()
         cursor= conexion.cursor()
@@ -571,14 +673,17 @@ class ManejadorBD(object):
         """
         return None
     
-    def insertarGrupoActuadores(self, conexion, nombre):
+    def insertarGrupoActuadores(self, conexion, nombre, deAvance):
         """
         Inserta en la base de datos un grupo de actuadores pasado como parámetro.
         Recibe como parámetros la conexión a la base y el grupo de actuadores a insertar.
         """
         c= Consultas()
         cursor= conexion.cursor()
-        cursor.execute(c.insertGrupoActuadores(), (nombre,))
+        if deAvance == 'N':
+            cursor.execute(c.insertGrupoActuadores(), (nombre,))
+        else:
+            cursor.execute(c.insertGrupoActuadoresAvance(), (nombre,))
         cursor.close()
         conexion.commit()
         cursor= conexion.cursor()
@@ -599,6 +704,39 @@ class ManejadorBD(object):
         cursor.close()  
         return None
     
+    def eliminadoLogicoDispositivo(self, conexion, idDispositivo):
+        """
+        Elimina lógicamente un grupo de actuadores del sistema, esta operación consiste en cambiar su atributo activoSistema.
+        Recibe como parámetros la conexión a la base de datos y el id del grupo de actuadores a eliminar.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateActivoSistemaDispositivo(),(idDispositivo,))
+        cursor.close()  
+        return None
+    
+    def eliminadoLogicoNivelSeveridad(self, conexion, idNivelSeveridad):
+        """
+        Elimina lógicamente un nivel de severidad del sistema, esta operación consiste en cambiar su atributo activoSistema.
+        Recibe como parámetros la conexión a la base de datos y el id del nivel de severidad a eliminar.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateActivoSistemaNivelSeveridad(),(idNivelSeveridad,))
+        cursor.close()  
+        return None
+    
+    def eliminadoLogicoFilaPerfilActivacion(self, conexion, idPerfil, idGrupoActuadores):
+        """
+        Elimina lógicamente un nivel de severidad del sistema, esta operación consiste en cambiar su atributo activoSistema.
+        Recibe como parámetros la conexión a la base de datos y el id del nivel de severidad a eliminar.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateActivoSistemaPerfilActivacion(),(idPerfil, idGrupoActuadores))
+        cursor.close()  
+        return None
+    
     def obtenerGrupoActuadores(self, conexion, idGrupoActuadores):
         """
         Obtiene desde la base de datos el grupo de actuadores determinado por el identificador pasado como parámetro.
@@ -614,11 +752,35 @@ class ManejadorBD(object):
         """
         return None
     
-    def insertarNivelPerfil(self, conexion, nivelSeveridad, perfilActivacion):
+    def insertarNivelSeveridad(self, conexion, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
         """
-        Inserta en la base de datos el nivel de severidad pasado como parámetro y su perfil de activación asociado.
-        Recibe como parámetros la conexión a la base, el nivel de severidad y el perfil de activación a insertar.
+        Inserta en la base de datos el nivel de severidad pasado como parámetro.
+        Recibe como parámetros la conexión a la base y el nivel de severidad a insertar.
         """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertNivelSeveridad(), (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo))
+        cursor.close()  
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoNivelSeveridad())
+        resultado= cursor.fetchone()
+        idNivel= resultado[0]
+        cursor.execute(c.updateIdPerfilActivacion(), (idNivel, idNivel))
+        cursor.close()  
+        conexion.commit
+        return idNivel
+    
+    def insertarFilaPerfilActivacion(self, conexion, idPerfilActivacion, idGrupoActuadores, estado):
+        """
+        Inserta en la base de datos una fila perteneciente a un perfil de activación.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertPerfilActivacion(), (idPerfilActivacion, idGrupoActuadores, estado))
+        cursor.close()  
+        conexion.commit()
+        cursor.close()  
         return None
     
     def eliminadoLogicoNivelPerfil(self, conexion, idNivelSeveridad):

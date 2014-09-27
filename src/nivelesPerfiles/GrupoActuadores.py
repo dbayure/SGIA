@@ -13,9 +13,10 @@ class GrupoActuadores(object):
     __estado=None
     __nombre=None
     __listaActuadores=None
+    __deAvance= None
     __activoSistema=None
 
-    def __init__(self, idGrupoActuador, estado, nombre, listaActuadores, activoSistema):
+    def __init__(self, idGrupoActuador, estado, nombre, listaActuadores, deAvance, activoSistema):
         """
         Constructor de la clase GrupoActuador, recibe como parámetros:
         -idGrupoActuador: int
@@ -28,6 +29,7 @@ class GrupoActuadores(object):
         self.__estado = estado
         self.__nombre = nombre
         self.__listaActuadores = listaActuadores
+        self.__deAvance= deAvance
         self.__activoSistema = activoSistema
 
     def get_id_grupo_actuador(self):
@@ -56,6 +58,12 @@ class GrupoActuadores(object):
         Devuelve la lista de actuadores de un GrupoActuador como un List<Actuador>
         """
         return self.__listaActuadores
+    
+    def get_de_avance(self):
+        """
+        Devuelve la lista de actuadores de un GrupoActuador como un List<Actuador>
+        """
+        return self.__deAvance
 
 
     def get_activo_sistema(self):
@@ -92,6 +100,13 @@ class GrupoActuadores(object):
         """
         self.__listaActuadores = value
 
+    def set_de_avance(self, value):
+        """
+        Asigna el estado del GrupoActuador en el sistema, recibe un Char(1)
+        Los estados pueden ser: A= Activo, E= Eliminado
+        """
+        self.__deAvance = value
+        
 
     def set_activo_sistema(self, value):
         """
@@ -105,8 +120,6 @@ class GrupoActuadores(object):
     nombre = property(get_nombre, set_nombre, None, None)
     listaActuadores = property(get_lista_actuadores, set_lista_actuadores, None, None)
     activoSistema = property(get_activo_sistema, set_activo_sistema, None, None)
-
-
-
+    deAvance= property(get_de_avance, set_de_avance, None, None)
     
         
