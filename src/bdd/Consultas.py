@@ -218,8 +218,19 @@ class Consultas(object):
                     where m.idTipoMensaje = t.idTipoMensaje and m.idMensaje = ? """
         return consulta
     
+    def selectTipoLogEventos(self):
+        consulta= "select idTipoLogEventos, nombre, enviarSMS, enviarMAIL from tipoLogEventos where idTipoLogEventos = ?"
+        return consulta
+    
     def selectUltimoFactor(self):
         consulta= "select max(idFactor) from factores"
+        return consulta
+    
+    def selectListaDestinatarios(self):
+        consulta= """select d.idDestinatario, d.nombre, d.celular, d.mail, d.horaMin, d.horaMax
+                    from destinatarios d, destinatariosTiposLog t
+                    where d.idDestinatario = t.idDestinatario
+                        and t.idTipoLogEvento= ?"""
         return consulta
     
     def selectUltimoTipoPlaca(self):
@@ -240,6 +251,10 @@ class Consultas(object):
     
     def selectUltimoNivelSeveridad(self):
         consulta= "select max(idNivel) from nivelesSeveridad"
+        return consulta
+    
+    def selectUltimoLogEvento(self):
+        consulta= "select max(idLogEvento) from logEventos"
         return consulta
     
     
@@ -318,7 +333,8 @@ class Consultas(object):
         return consulta
     
     def insertLogEvento(self):
-        return None
+        consulta= "insert into logEventos (idTipoLog, idDispositivo, idMensaje, fecha) values (?, ?, ?, ?)"
+        return consulta
     
     def updateEstadoActuador(self):
         consulta = "update actuadores set estado = ? where idDispositivo= ?"

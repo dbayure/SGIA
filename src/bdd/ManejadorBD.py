@@ -18,6 +18,9 @@ from src.nivelesPerfiles.PerfilActivacion import PerfilActivacion
 from src.nivelesPerfiles.NivelSeveridad import NivelSeveridad
 from src.placa.ActuadorAvance import ActuadorAvance
 from src.placa.Posicion import Posicion
+from src.logs.Destinatario import Destinatario
+from src.logs.TipoLogEventos import TipoLogEventos
+
 
 class ManejadorBD(object):
     """
@@ -95,6 +98,7 @@ class ManejadorBD(object):
         cursor.close()
         return resultado[0]
     
+   
     def __obtenerListaPosicionesActuadorAvance(self, conexion, idActuadorAvance):
         c= Consultas()
         cursor= conexion.cursor()
@@ -248,7 +252,6 @@ class ManejadorBD(object):
             placaAuxiliar.set_ik(ik)
             if ik == None:
                 print('No se pudo instanciar el ik de la placa auxiliar')
-                #emitir alerta y generar log de evento
             for dispositivo in l:
                 dispositivo.set_padre(placaAuxiliar)
             lista.append(placaAuxiliar)
@@ -831,9 +834,47 @@ class ManejadorBD(object):
         mensaje= Mensaje(idMensaje, tipo, texto)
         return mensaje
     
-    def insertarLogEvento (self, conexion, logEvento):
+    def obtenerTipoLogEvento(self, conexion, idTipoLog):
+        """
+        Obtiene desde la base de datos el tipo de log de eventos que corresponde al id pasado como parámetro.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectTipoLogEventos(), (idTipoLog,))
+        resultado= cursor.fetchone()
+        
+        idTipoLogEvento= resultado[0]
+        nombre= resultado[1]
+        enviarSMS= resultado[2]
+        enviarMAIL= resultado[3]
+        listaDestinatarios= list()
+        cursor.execute(c.selectListaDestinatarios(), (idTipoLogEvento,))
+        for fila in cursor:
+            idDestinatario= fila[0]
+            nombreDestinatario= fila[1]
+            celular= fila[2]
+            mail= fila[3]
+            horaMin= fila[4]
+            horaMax= fila[5]
+            destinatario= Destinatario(idDestinatario, nombreDestinatario, celular, mail, horaMin, horaMax)
+            listaDestinatarios.append(destinatario)
+        cursor.close()
+        tipoLogEvento= TipoLogEventos(idTipoLogEvento, nombre, enviarSMS, enviarMAIL, listaDestinatarios)
+        return tipoLogEvento
+    
+    def insertarLogEvento (self, conexion, idTipoLog, idDispositivo, idMensaje, fecha):
         """
         Inserta en la base de datos el log de evento pasado como parámetro.
         Recibe como parámetros la conexión a la base y el log de evento a insertar.
         """
-        return None
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertLogEvento(), (idTipoLog, idDispositivo, idMensaje, fecha))
+        cursor.close()  
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoLogEvento())
+        resultado= cursor.fetchone()
+        idLogEvento= resultado[0]
+        cursor.close()  
+        return idLogEvento

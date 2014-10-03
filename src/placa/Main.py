@@ -11,7 +11,7 @@ from Phidgets.PhidgetException import PhidgetException
 from Phidgets.Devices.InterfaceKit import InterfaceKit
 from src.recursos.Herramientas import Herramientas
 from src.placa.PlacaAuxiliar import PlacaAuxiliar
-from src.recursos import Propiedades, Mensajes
+from src.recursos import Propiedades, Mensajes, TiposLogs
 from src.lecturas.ResultadoLectura import ResultadoLectura
 from datetime import datetime
 from src.lecturas.ResultadoAccion import ResultadoAccion
@@ -30,6 +30,8 @@ from src.ws.ResultadoCreacionWS import ResultadoCreacionWS
 import math
 import time
 from src.placa.ActuadorAvance import ActuadorAvance
+from src.logs.LogEvento import LogEvento
+from src.logs.SMS import SMS
 
 __placa=None
 __ws=None
@@ -82,7 +84,6 @@ def iniciarPlaca():
                     posicion.set_lista_sensores(listaSensores)
       
         grupo.set_lista_actuadores(listaActuadores)
-    
     #aca la lista de grupos de actuadores ya está actualizada con la lista de actuadores de cada una 
     #Hay que cargar la lista de niveles de severidad
     listaNivelesSeveridad= mbd.obtenerListaNivelesSeveridad(con)
@@ -111,19 +112,30 @@ def iniciarPlaca():
 
     mbd.cerrarConexion()
     #Tengo todo lo necesario para instanciar el objeto Placa
-    try:
-        h= Herramientas()
-        ik= h.instanciarIK(int(nroSerie))
-        if ik <> None:
-            placa= Placa(nroSerie, estadoSistema, periodicidadLecturas, periodicidadNiveles, listaDispositivos, listaGrupoActuadores, listaFactores, listaNivelesSeveridad) 
-            placa.set_ik(ik)
-        else:
-            print('ERROR FATAL')
-            #EMITIR ALERTA Y GENERAR LOG DE EVENTO
-    except PhidgetException as e:
-        print('No se pudo instanciar el ik de la placa controladora')
-        #emitir alerta y generar log de evento    
+    h= Herramientas()
+    ik= h.instanciarIK(int(nroSerie))
+    placa= None
+    if ik <> None:
+        placa= Placa(nroSerie, estadoSistema, periodicidadLecturas, periodicidadNiveles, listaDispositivos, listaGrupoActuadores, listaFactores, listaNivelesSeveridad) 
+        placa.set_ik(ik)
+        chequearPlacasAuxiliares(listaDispositivos)
+    else:
+        print('ERROR FATAL')
+        idTipoLog= TiposLogs.noSePuedeInstanciarPC
+        idMensaje= Mensajes.noSePuedeInstanciarPlacaControladora            
+        generarLogEvento(idTipoLog, idMensaje, 0)
+
     return placa
+
+def chequearPlacasAuxiliares(listaDispositivos):
+    for dispositivo in listaDispositivos:
+        if isinstance(dispositivo, (PlacaAuxiliar)):
+            if dispositivo.get_ik() == None:
+                idTipoLog= TiposLogs.noSePuedeInstanciarPlacaAuxiliar
+                idMensaje= Mensajes.noSePuedeInstanciarPlacaAuxiliar
+                generarLogEvento(idTipoLog, idMensaje, dispositivo)
+            chequearPlacasAuxiliares(dispositivo.get_lista_dispositivos())
+    
 
 def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
     dispositivo=None
@@ -146,7 +158,7 @@ class iniciarWS(threading.Thread):
     def run(self):
         try:
             from wsgiref.simple_server import make_server
-            server = make_server('192.168.1.43', 7789, Comunicacion())
+            server = make_server('192.168.1.44', 7789, Comunicacion())
             server.serve_forever()
         except ImportError:
             print ("Error: example server code requires Python >= 2.5")
@@ -159,7 +171,6 @@ class tomarLecturas(threading.Thread):
         placa= getPlaca()
         listaFactores= placa.get_lista_factores()
         while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
-            print("Lecturas tomadas")
             for factor in listaFactores:
                 procesarLecturaFactor(factor)
             time.sleep(placa.get_periodicidad_lecturas())
@@ -256,15 +267,6 @@ def cambiarEstadoPlaca(estado):
         iniciarHiloNiveles()
     return None
 
-def chequeoPlaca(): #DESPUES
-    return None
-
-def chequeoDispositivo(idDispositivo): #DESPUES
-    return None
-
-def chequeoDispositivos(): #DESPUES
-    return None
-
 def obtenerIkPadre (dispositivo):
     """Devuelve el interface kit que controla al dispositivo pasado como parámetro"""
     padre= dispositivo.get_padre()
@@ -283,15 +285,18 @@ def lecturaSensor(sensor):
     if tipoPuerto.get_nombre() == "analogico":
         try: 
             valor=ik.getSensorValue(sensor.get_numero_puerto())
-            l=valor
-            temp= eval(sensor.get_formula_conversion())
+            if valor == 0:
+                temp=-999
+            else:
+                l=valor
+                temp= eval(sensor.get_formula_conversion())
         except PhidgetException as e:
-            temp= -1
+            temp= -999
     elif tipoPuerto.get_nombre() == "e-digital":
         try: 
             temp= ik.getInputState(sensor.get_numero_puerto())
         except PhidgetException as e:
-            temp= -1
+            temp= -999
     return temp
 
 def encenderActuador(actuador):
@@ -351,7 +356,9 @@ def encenderGrupoActuadores(grupo):
             estadoActuador=encenderActuador(actuador)
             if estadoActuador == 'F':
                 print('ERROR ENCENDIDO ACTUADOR')
-                #EMITIR ALERTA Y GENERAR LOG DE EVENTO
+                idTipoLog= TiposLogs.errorEncendidoActuador
+                idMensaje= Mensajes.encendidoActuadorError   
+                generarLogEvento(idTipoLog, idMensaje, actuador)
             else:
                 mbd= ManejadorBD()
                 con= mbd.getConexion()
@@ -422,7 +429,9 @@ def apagarGrupoActuadores(grupo):
             estadoActuador=apagarActuador(actuador)
             if estadoActuador == 'F':
                 print('ERROR APAGADO ACTUADOR')
-                #EMITIR ALERTA Y GENERAR LOG DE EVENTO
+                idTipoLog= TiposLogs.errorApagadoActuador
+                idMensaje= Mensajes.apagadoActuadorError  
+                generarLogEvento(idTipoLog, idMensaje, actuador)
             else:
                 mbd= ManejadorBD()
                 con= mbd.getConexion()
@@ -474,12 +483,6 @@ def apagarGrupoActuadores(grupo):
     fecha= datetime.now()
     resultadoAccion= ResultadoAccion(mensaje, fecha, grupo.get_id_grupo_actuador(), grupo.get_estado())
     return resultadoAccion
-
-def cargarNivelPerfil(nivelSeveridad, perfilActivacion): #DESPUES
-    return None
-
-def eliminarNivelPerfil (idNivelSeveridad): #DESPUES
-    return None
 
 def crearSensor (nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
     mbd= ManejadorBD()
@@ -563,18 +566,19 @@ def agregarSensorPosicionActuadorAvance (idSensor, idActuadorAvance, numeroPosic
     con.close()
     return None
 
-def iniciarChequeosAutomaticos(): #DESPUES
-    return None
-
 def analizarLecturas(listaLecturas, factor):
     """
     Método para procesar una lista de lecturas de un factor pasado como parámetro.
     Realiza la selección de lecturas válidas y determina si alguna de estas está fuera de rango
     """
     lecturasOk= list()
+    listaValores= list()
+    for tupla in listaLecturas:
+        listaValores.append(tupla[0])
     if len(listaLecturas) > 1:
-        for lectura in listaLecturas:
-            promedioResto= (sum(listaLecturas) - lectura) / (len(listaLecturas) - 1)
+        for tuplaLectura in listaLecturas:
+            lectura= tuplaLectura[0]
+            promedioResto= (sum(listaValores) - lectura) / (len(listaValores) - 1)
             diferencia= lectura - promedioResto
             if diferencia < 0:
                 diferencia= diferencia * -1
@@ -582,19 +586,28 @@ def analizarLecturas(listaLecturas, factor):
                 lecturasOk.append(lectura)
             else:
                 print 'LECTURA FUERA DE UMBRAL PERMITIDO'
-                #GENERAR ALERTA Y LOG EVENTO
+                idTipoLog= TiposLogs.lecturaFueraUmbral
+                idMensaje= Mensajes.lecturaFueraUmbral
+                sensor= tuplaLectura[1]
+                generarLogEvento(idTipoLog, idMensaje, sensor)
             if lectura < factor.get_valor_min() or lectura > factor.get_valor_max() :
                 print 'LECTURA FUERA DE RANGO'
-                #GENERAR ALERTA LOG DE EVENTOS
+                idTipoLog= TiposLogs.lecturaFueraRango
+                idMensaje= Mensajes.lecturaFueraRango
+                sensor= tuplaLectura[1]
+                generarLogEvento(idTipoLog, idMensaje, sensor)
     else:
-        lectura= listaLecturas[0]
+        lectura= listaLecturas[0][0]
         if lectura < factor.get_valor_min() or lectura > factor.get_valor_max() :
-                print 'LECTURA FUERA DE RANGO'
-                #GENERAR ALERTA LOG DE EVENTOS
+            print 'LECTURA FUERA DE RANGO'
+            #GENERAR ALERTA LOG DE EVENTOS
+            idTipoLog= TiposLogs.lecturaFueraRango
+            idMensaje= Mensajes.lecturaFueraRango
+            sensor= listaLecturas[0][1]
+            generarLogEvento(idTipoLog, idMensaje, sensor)
         lecturasOk.append(lectura)
     if len(lecturasOk) == 0:
         print ('NINGUNA LECTURA VÁLIDA')
-        #GENERAR LOG DE EVENTO Y EMITIR ALERTA PARA VERIFICAR TODOS LOS SENSORES DEL FACTOR
         return 'E'
     else: 
         resultado= sum(lecturasOk) / len(lecturasOk) 
@@ -608,16 +621,17 @@ def procesarLecturaFactor(factor):
     listaSensores= factor.get_lista_sensores()
     listaLecturas= list()
     for sensor in listaSensores:
-        lectura=lecturaSensor(sensor)
-        if lectura < 0:
-            print('ERROR DE LECTURA')
-            #generar log de eventos
+        lectura=(lecturaSensor(sensor), sensor)
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mbd.insertarLecturaSensor(con, sensor.get_id_dispositivo(), lectura[0])
+        con.commit()
+        con.close()
+        if lectura[0] == -999:
+            idTipoLog= TiposLogs.errorLecturaSensor
+            idMensaje= Mensajes.lecturaError
+            generarLogEvento(idTipoLog, idMensaje, sensor)
         else:
-            mbd= ManejadorBD()
-            con= mbd.getConexion()
-            mbd.insertarLecturaSensor(con, sensor.get_id_dispositivo(), lectura)
-            con.commit()
-            con.close()
             listaLecturas.append(lectura)
     lecturaFinal= -999
     if len(listaLecturas) == 0:
@@ -663,7 +677,6 @@ def eliminarFactor(idFactor):
     """
     Método para realizar el eliminado lógico de un factor del sistema
     """
-    #falta controlar que para cada sensor perteneciente a la lista del factor este no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoFactor(con, idFactor)
@@ -675,7 +688,6 @@ def eliminarDispositivo(idDispositivo):
     """
     Método para realizar el eliminado lógico de un dispositivo del sistema
     """
-    #falta controlar que para cada actuador en su lista no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoDispositivo(con, idDispositivo)
@@ -687,7 +699,6 @@ def eliminarGrupoActuadores(idGrupoActuadores):
     """
     Método para realizar el eliminado lógico de un grupo de actuadores del sistema
     """
-    #falta controlar que para cada actuador en su lista no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoGrupoActuadores(con, idGrupoActuadores)
@@ -699,7 +710,6 @@ def eliminarNivelSeveridad(idNivelSeveridad):
     """
     Método para realizar el eliminado lógico de un grupo de actuadores del sistema
     """
-    #falta controlar que para cada actuador en su lista no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoNivelSeveridad(con, idNivelSeveridad)
@@ -711,13 +721,36 @@ def eliminarFilaPerfilActivacion(idPerfil, idGrupoActuadores):
     """
     Método para realizar el eliminado lógico de un grupo de actuadores del sistema
     """
-    #falta controlar que para cada actuador en su lista no este activo en el sistema
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoFilaPerfilActivacion(con, idPerfil, idGrupoActuadores)
     con.commit()
     con.close()
     return None
+
+def generarLogEvento(idTipoLog, idMensaje, dispositivo):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    tipoLogEvento=mbd.obtenerTipoLogEvento(con, idTipoLog)
+    mensaje=mbd.obtenerMensaje(con, idMensaje)
+    fecha= datetime.now()
+    if dispositivo <> 0:
+        idLogEvento=mbd.insertarLogEvento(con, idTipoLog, dispositivo.get_id_dispositivo(), idMensaje, fecha)
+    else:
+        idLogEvento=mbd.insertarLogEvento(con, idTipoLog, 0, idMensaje, fecha)
+    con.close()
+    logEvento= LogEvento(idLogEvento, tipoLogEvento, dispositivo, mensaje, fecha)
+    if (tipoLogEvento.get_enviar_sms() == 'S'):
+        print('ENVIAR SMS')
+        sms= SMS()
+        if sms.enviarSMS(logEvento) == 'F':
+            idTipoLog= TiposLogs.errorSMS
+            idMensaje= Mensajes.falloSMS
+            generarLogEvento(idTipoLog, idMensaje, 0)
+        """LLAMAR A METODO DE ENVIO DE SMS"""
+    if (tipoLogEvento.get_enviar_mail() == 'S'):
+        print('ENVIAR MAIL')
+        """LLAMAR A METODO DE ENVIO DE MAIL POR WS"""
 
 def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
     """
@@ -763,7 +796,9 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                 ik.setOutputState(actuadorAvance.get_numero_puerto(), 0)
                 if expiroTiempo:
                     print("Expiro el tiempo máximo para completar el movimiento")
-                    #generar log de eventos
+                    idTipoLog= TiposLogs.expiroTiempoMovimiento
+                    idMensaje= Mensajes.expiroTiempoPosiciones
+                    generarLogEvento(idTipoLog, idMensaje, actuadorAvance)
                     return 'F'
                 else:
                     actuadorAvance.set_posicion(nroDestino)
@@ -775,11 +810,12 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                     return nroDestino
             else:
                 print("No puede instanciar el padre")
-                #Lanzar alerta y generar log de evento
+                idTipoLog= TiposLogs.noSePuedeInstanciarPadre
+                idMensaje= Mensajes.noSePuedeInstanciarPadre
+                generarLogEvento(idTipoLog, idMensaje, actuadorAvance.get_padre())
                 return 'F'
         else:
             print ("El actuador de avance no tiene esa posicion")
-            #generar error en log de evento
             return 'F'
     elif nroDestino < posicionActual:
         listaPosiciones= actuadorAvance.get_lista_posiciones()
@@ -816,11 +852,12 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                     if diferenciaTiempo >= (actuadorAvance.get_tiempo_entre_posiciones() * nroSaltos):
                         detener=True
                         expiroTiempo= True
-                #q no lo cambie        
                 ik.setOutputState(actuadorAvance.get_numero_puerto_retroceso(), 0)
                 if expiroTiempo:
                     print("Expiro el tiempo máximo para completar el movimiento")
-                    #generar log de eventos
+                    idTipoLog= TiposLogs.expiroTiempoMovimiento
+                    idMensaje= Mensajes.expiroTiempoPosiciones
+                    generarLogEvento(idTipoLog, idMensaje, actuadorAvance)
                     return 'F'
                 else:
                     actuadorAvance.set_posicion(nroDestino)
@@ -832,11 +869,12 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                     return nroDestino
             else:
                 print("No puede instanciar el padre")
-                #Lanzar alerta y generar log de evento
+                idTipoLog= TiposLogs.noSePuedeInstanciarPadre
+                idMensaje= Mensajes.noSePuedeInstanciarPadre
+                generarLogEvento(idTipoLog, idMensaje, actuadorAvance.get_padre())
                 return 'F'
         else:
             print ("El actuador de avance no tiene esa posicion")
-            #generar error en log de evento
             return 'F'
             
 def cambiarPosicionGrupoActuadores(grupo, nroPosicion):
@@ -850,8 +888,7 @@ def cambiarPosicionGrupoActuadores(grupo, nroPosicion):
         if posicionActual <> nroPosicion:
             estadoActuador=cambiarPosicionActuadorAvance(actuadorAvance, nroPosicion)
             if estadoActuador == 'F':
-                print('ERROR APAGADO ACTUADOR')
-                #EMITIR ALERTA Y GENERAR LOG DE EVENTO
+                print('ERROR CAMBIO POSICIÓN ACTUADOR')
             else:
                 mbd= ManejadorBD()
                 con= mbd.getConexion()
@@ -1430,90 +1467,12 @@ class Comunicacion(SimpleWSGISoapApp):
 
 if __name__ == '__main__':
     __placa=iniciarPlaca()
-    iniciarHiloWS()
-    estado= __placa.get_estado_sistema()
-    if estado == 'M' or estado == 'A':
-        iniciarHiloLecturas()
-    if estado == 'A':
-        iniciarHiloNiveles()
-
-    """threading.activeCount()
-    
-    h= Herramientas() 
-    listaFactores= __placa.get_lista_factores()
-    for factor in listaFactores:
-        resultado=procesarLecturaFactor(factor)
-        print ('Factor: '+str(resultado.get_id_factor()) +'; '+factor.get_nombre())
-        print (resultado.get_mensaje().get_texto())
-        print ('Fecha: '+str(resultado.get_fecha()))
-        print ('Valor: '+str(resultado.get_valor()) +' '+factor.get_unidad()) 
-    listaGrupo= __placa.get_lista_grupo_actuadores()
-    for grupo in listaGrupo:
-        print('Estado actual del grupo: '+ grupo.get_estado() )
-        if grupo.get_estado() == 'A':
-            resultado=encenderGrupoActuadores(grupo)
-            print('Grupo Actuadores: '+str(resultado.get_id_grupo_actuadores())+'; '+grupo.get_nombre())
-            print(resultado.get_mensaje().get_texto())
-            print ('Fecha: '+str(resultado.get_fecha()))
-            print ('Estado: '+resultado.get_tipo_accion())
-        else:
-            resultado=apagarGrupoActuadores(grupo)
-            print('Grupo Actuadores: '+str(resultado.get_id_grupo_actuadores())+'; '+grupo.get_nombre())
-            print(resultado.get_mensaje().get_texto())
-            print ('Fecha: '+str(resultado.get_fecha()))
-            print ('Estado: '+resultado.get_tipo_accion())
-            
-    listaNiveles= __placa.get_lista_niveles_severidad()
-    for nivel in listaNiveles:
-        print("Nivel: "+nivel.get_nombre())
-        print("Factor: "+nivel.get_factor().get_nombre())
-        print("Prioridad: "+str(nivel.get_prioridad()))
-        print ("Rango Minimo: "+ str(nivel.get_rango_minimo()))
-        print ("Rango Maximo: "+ str(nivel.get_rango_maximo()))
-        perfil= nivel.get_perfil_activacion()
-        listaGrupoEstado= perfil.get_lista_grupo_actuadores_estado()
-        print("Perfil de activacion:")
-        for grupoEstado in listaGrupoEstado:
-            grupo= grupoEstado[0]
-            estado= grupoEstado[1]
-            print("Grupo: "+grupo.get_nombre() +", Estado: "+ estado) """
-    
-    
-    """
-    listaGrupo= __placa.get_lista_grupo_actuadores()
-    for grupo in listaGrupo:
-        print("Grupo: "+grupo.get_nombre())
-        if grupo.get_de_avance() == 'S':
-            resultado=cambiarPosicionGrupoActuadores(grupo, 1)
-            print('Grupo Actuadores: '+str(resultado.get_id_grupo_actuadores())+'; '+grupo.get_nombre())
-            print(resultado.get_mensaje().get_texto())
-            print ('Fecha: '+str(resultado.get_fecha()))
-            print ('Estado: '+resultado.get_tipo_accion())
-        listaActuadores= grupo.get_lista_actuadores()
-        for actuador in listaActuadores:
-            if isinstance(actuador, (ActuadorAvance)):
-                if actuador.get_id_dispositivo() == 16:
-                    print("*************************************************Intenta prender el actuador de avance")
-                    cambiarPosicionActuadorAvance(actuador, 2)
-                
-                print("    Es un actuador de avance")
-                print("    Id: "+str(actuador.get_id_dispositivo()))
-                print("    Nombre: "+actuador.get_nombre())
-                print("    Posicion: "+str(actuador.get_posicion()))
-                print("    Tiempo entre posiciones: "+str(actuador.get_tiempo_entre_posiciones()))
-                print("    Puerto avance: "+str(actuador.get_numero_puerto()))
-                print("    Puerto retroceso: "+str(actuador.get_numero_puerto_retroceso()))
-                print("        Posiciones:")
-                listaPosiciones= actuador.get_lista_posiciones()
-                for posicion in listaPosiciones:
-                    print("        Nombre pos.: "+posicion.get_descripcion())
-                    listaSensores=posicion.get_lista_sensores()
-                    print("        Cantidad de sensores: "+str(len(listaSensores)))
-                    for sensor in listaSensores:
-                        print("            Sensores posicion:")
-                        print("            Id sensor: "+str(sensor.get_id_dispositivo()))
-                        print ("            Nombre: "+sensor.get_nombre())
-                        print ("            Puerto: "+str(sensor.get_numero_puerto()))
-                """
-
-    
+    if __placa <> None:
+        iniciarHiloWS()
+        estado= __placa.get_estado_sistema()
+        if estado == 'M' or estado == 'A':
+            iniciarHiloLecturas()
+        if estado == 'A':
+            iniciarHiloNiveles()
+    else:
+        print('Sistema finalizado...')
