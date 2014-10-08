@@ -18,9 +18,9 @@ class ActuadorAvance(Dispositivo):
     __tiempoEntrePosiciones= None
     __listaPosiciones= None
 
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, posicion, tipoActuador, tipoPuerto, numeroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, listaPosiciones):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta, posicion, tipoActuador, tipoPuerto, numeroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, listaPosiciones):
         Dispositivo.__init__(self, 
-            idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre)
+            idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta)
         self.__posicion = posicion
         self.__tipoActuador = tipoActuador
         self.__tipoPuerto = tipoPuerto

@@ -18,7 +18,7 @@ class PlacaAuxiliar(Dispositivo):
     __listaDispositivos= None
     __ik = None
     
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, nroSerie, tipo, listaDispositivos):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta, nroSerie, tipo, listaDispositivos):
         """
         Constructor de una placaAuxiliar, recibe como parámetros:
             -idDispositivo : int (dispositivo)
@@ -30,7 +30,7 @@ class PlacaAuxiliar(Dispositivo):
             -tipo: String (placaAuxiliar)
             -listaDispositivos: List<dispositivo> (placaAuxiliar)
         """
-        Dispositivo.__init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre)
+        Dispositivo.__init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta)
         self.__nroSerie = nroSerie
         self.__tipo = tipo
         self.__listaDispositivos = listaDispositivos

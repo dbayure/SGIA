@@ -13,7 +13,7 @@ class Actuador(Dispositivo):
     __tipoActuador= None
     __tipoPuerto= None
 
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estado, tipoActuador, tipoPuerto):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta, estado, tipoActuador, tipoPuerto):
         """
         Constructor de un actuador, recibe como parámetros:
             -idDispositivo : int (dispositivo)
@@ -26,7 +26,7 @@ class Actuador(Dispositivo):
             -tipoPuerto: tipoPuerto (actuador)
         """
         Dispositivo.__init__(self, 
-            idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre)
+            idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta)
         self.__estadoActuador = estado
         self.__tipoActuador = tipoActuador
         self.__tipoPuerto = tipoPuerto

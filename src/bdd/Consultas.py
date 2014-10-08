@@ -40,7 +40,7 @@ class Consultas(object):
         return consulta
     
     def selectSensoresActivosPlacaPadre(self):
-        consulta= """select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, s.formulaConversion, s.idTipoPuerto
+        consulta= """select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, s.formulaConversion, s.idTipoPuerto
                      from sensores s, dispositivos d
                      where s.idDispositivo = d.idDispositivo
                         and s.idPlacaPadre is Null
@@ -48,7 +48,7 @@ class Consultas(object):
         return consulta
     
     def selectSensoresActivosPlacaAux(self):
-        consulta= """select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, s.formulaConversion, s.idTipoPuerto
+        consulta= """select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, s.formulaConversion, s.idTipoPuerto
                      from sensores s, dispositivos d
                      where s.idDispositivo = d.idDispositivo
                         and s.idPlacaPadre = ?
@@ -63,7 +63,7 @@ class Consultas(object):
 
     
     def selectActuadoresActivosPlacaPadre(self):
-        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.estado, a.idTipoPuerto, a.idTipoActuador
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, a.estado, a.idTipoPuerto, a.idTipoActuador
                     from actuadores a, dispositivos d
                     where a.idDispositivo = d.idDispositivo
                     and a.idPlacaPadre is Null
@@ -71,7 +71,7 @@ class Consultas(object):
         return consulta
     
     def selectActuadoresAvanceActivosPlacaPadre(self):
-        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.posicion, a.idTipoPuerto, a.idTipoActuador, a.nroPuertoRetroceso,
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, a.posicion, a.idTipoPuerto, a.idTipoActuador, a.nroPuertoRetroceso,
                     a.idTipoPuertoRetroceso, a.tiempoEntrePosiciones
                     from actuadoresAvance a, dispositivos d
                     where a.idDispositivo = d.idDispositivo
@@ -80,7 +80,7 @@ class Consultas(object):
         return consulta
     
     def selectActuadoresActivosPlacaAux(self):
-        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.estado, a.idTipoPuerto, a.idTipoActuador
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, a.estado, a.idTipoPuerto, a.idTipoActuador
                     from actuadores a, dispositivos d
                     where a.idDispositivo = d.idDispositivo
                     and a.idPlacaPadre = ?
@@ -88,7 +88,7 @@ class Consultas(object):
         return consulta
     
     def selectActuadoresAvanceActivosPlacaAux(self):
-        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, a.posicion, a.idTipoPuerto, a.idTipoActuador, a.nroPuertoRetroceso,
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, a.posicion, a.idTipoPuerto, a.idTipoActuador, a.nroPuertoRetroceso,
                     a.idTipoPuertoRetroceso, a.tiempoEntrePosiciones
                     from actuadoresAvance a, dispositivos d
                     where a.idDispositivo = d.idDispositivo
@@ -117,7 +117,7 @@ class Consultas(object):
 
     
     def selectPlacasAuxiliaresActivasPlacaPadre(self):
-        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, p.nroSerie, p.idTipoPlaca
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta,  p.nroSerie, p.idTipoPlaca
                     from placasAuxiliares p, dispositivos d
                     where p.idDispositivo = d.idDispositivo
                     and p.idPlacaPadre is Null
@@ -125,7 +125,7 @@ class Consultas(object):
         return consulta
     
     def selectPlacasAuxiliaresActivasPlacaAux(self):
-        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, p.nroSerie, p.idTipoPlaca
+        consulta="""select d.idDispositivo, d.nombre, d.modelo, d.nroPuerto, d.activoSistema, d.estadoAlerta, p.nroSerie, p.idTipoPlaca
                     from placasAuxiliares p, dispositivos d
                     where p.idDispositivo = d.idDispositivo
                     and p.idPlacaPadre = ?
@@ -295,7 +295,7 @@ class Consultas(object):
         return consulta
     
     def insertDispositivo(self):
-        consulta= """insert into dispositivos (nombre, modelo, nroPuerto, activoSistema) 
+        consulta= """insert into dispositivos (nombre, modelo, nroPuerto, activoSistema, estadoAlerta) 
                         values (?, ?, ?, ?)"""
         return consulta
     
@@ -375,4 +375,11 @@ class Consultas(object):
     def updateActivoSistemaPerfilActivacion(self):
         consulta= "update perfilesActivacion set activoSistema = 'N' where idPerfilActivacion = ? and idGrupoActuadores = ?"
         return consulta
+    
+    def updateEstadoAlertaDispositivo(self):
+        consulta= "update dispositivos set estadoAlerta = ? where idDispositivo = ?"
+        return consulta
+    
+    
+        
         

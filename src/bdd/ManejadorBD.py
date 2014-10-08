@@ -126,15 +126,16 @@ class ManejadorBD(object):
             modelo= fila[2]
             nroPuerto= fila[3]
             activoSistema= fila[4]
-            formulaConversion= fila[5]
-            idTipoPuerto=fila[6]
+            estadoAlerta= fila[5]
+            formulaConversion= fila[6]
+            idTipoPuerto=fila[7]
             cursorAux= conexion.cursor()
             cursorAux.execute(c.selectTipoPuerto(), (idTipoPuerto,))
             resAux= cursorAux.fetchone()
             nombreTipoPuerto= resAux[0]
             cursorAux.close()
             tipoPuerto= TipoPuerto(idTipoPuerto, nombreTipoPuerto)
-            sensor= Sensor(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, formulaConversion, tipoPuerto)
+            sensor= Sensor(idDispositivo, nombre, modelo, nroPuerto, activoSistema,  None, estadoAlerta, formulaConversion, tipoPuerto)
             lista.append(sensor)
         return None
     
@@ -151,9 +152,10 @@ class ManejadorBD(object):
             modelo= fila[2]
             nroPuerto= fila[3]
             activoSistema= fila[4]
-            estado= fila[5]
-            idTipoPuerto=fila[6]
-            idTipoActuador=fila[7]
+            estadoAlerta= fila[5]
+            estado= fila[6]
+            idTipoPuerto=fila[7]
+            idTipoActuador=fila[8]
             cursorAux= conexion.cursor()
             cursorAux.execute(c.selectTipoPuerto(), (idTipoPuerto,))
             resAux= cursorAux.fetchone()
@@ -164,7 +166,7 @@ class ManejadorBD(object):
             cursorAux.close()
             tipoPuerto= TipoPuerto(idTipoPuerto, nombreTipoPuerto)
             tipoActuador= TipoActuador(idTipoActuador, nombreTipoActuador)
-            actuador= Actuador(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, estado, tipoActuador, tipoPuerto)
+            actuador= Actuador(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, estadoAlerta, estado, tipoActuador, tipoPuerto)
             lista.append(actuador)
         return None
     
@@ -182,12 +184,13 @@ class ManejadorBD(object):
             modelo= fila[2]
             nroPuerto= fila[3]
             activoSistema= fila[4]
-            posicion= fila[5]
-            idTipoPuerto=fila[6]
-            idTipoActuador=fila[7]
-            nroPuertoRetroceso=fila[8]
-            idTipoPuertoRetroceso=fila[9]
-            tiempoEntrePosiciones=fila[10]
+            estadoAlerta= fila[5]
+            posicion= fila[6]
+            idTipoPuerto=fila[7]
+            idTipoActuador=fila[8]
+            nroPuertoRetroceso=fila[9]
+            idTipoPuertoRetroceso=fila[10]
+            tiempoEntrePosiciones=fila[11]
             cursorAux= conexion.cursor()
             cursorAux.execute(c.selectTipoPuerto(), (idTipoPuerto,))
             resAux= cursorAux.fetchone()
@@ -204,7 +207,7 @@ class ManejadorBD(object):
             tipoActuador= TipoActuador(idTipoActuador, nombreTipoActuador)
             listaPosiciones= self.__obtenerListaPosicionesActuadorAvance(conexion, idDispositivo)
             
-            actuadorAvance= ActuadorAvance(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, posicion, tipoActuador, tipoPuerto, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, listaPosiciones)
+            actuadorAvance= ActuadorAvance(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, estadoAlerta, posicion, tipoActuador, tipoPuerto, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, listaPosiciones)
             lista.append(actuadorAvance)
             cursorAux.close()
         return None
@@ -232,8 +235,9 @@ class ManejadorBD(object):
             modelo= fila[2]
             nroPuerto= fila[3]
             activoSistema= fila[4]
-            nroSerie= fila[5]
-            idTipoPlaca=fila[6]
+            estadoAlerta= fila[5]
+            nroSerie= fila[6]
+            idTipoPlaca=fila[7]
             cursorAux= conexion.cursor()
             cursorAux.execute(c.selectTipoPlaca(), (idTipoPlaca,))
             resAux= cursorAux.fetchone()
@@ -246,7 +250,7 @@ class ManejadorBD(object):
             self.__cargarActuadores(l, conexion, idDispositivo)
             self.__cargarActuadoresAvance(l, conexion, idDispositivo)
             self.__cargarPlacasAuxiliares(l, conexion, idDispositivo)
-            placaAuxiliar= PlacaAuxiliar(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, nroSerie, tipoPlaca, l)
+            placaAuxiliar= PlacaAuxiliar(idDispositivo, nombre, modelo, nroPuerto, activoSistema, None, estadoAlerta, nroSerie, tipoPlaca, l)
             h= Herramientas()
             ik= h.instanciarIK(int(nroSerie))
             placaAuxiliar.set_ik(ik)
@@ -641,7 +645,7 @@ class ManejadorBD(object):
         """
         c= Consultas()
         cursor= conexion.cursor()
-        cursor.execute(c.insertDispositivo(), (nombre, modelo, nroPuerto, 'S'))
+        cursor.execute(c.insertDispositivo(), (nombre, modelo, nroPuerto, 'S', 'N'))
         cursor.close()
         conexion.commit()
         cursor= conexion.cursor()
@@ -878,3 +882,29 @@ class ManejadorBD(object):
         idLogEvento= resultado[0]
         cursor.close()  
         return idLogEvento
+    
+    def cambiarEstadoAlerta (self, conexion, idDispositivo, estadoAlerta):
+        """
+        Inserta en la base de datos el log de evento pasado como parámetro.
+        Recibe como parámetros la conexión a la base y el log de evento a insertar.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateEstadoAlertaDispositivo(), (estadoAlerta, idDispositivo))
+        cursor.close()  
+        conexion.commit()
+        return None
+    
+    def recuperarActuadorAvance (self, conexion, idDispositivo, numeroPosicion):
+        """
+        Inserta en la base de datos el log de evento pasado como parámetro.
+        Recibe como parámetros la conexión a la base y el log de evento a insertar.
+        """
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateEstadoAlertaDispositivo(), ('N', idDispositivo))
+        conexion.commit()
+        cursor.execute(c.updatePosicionActuadorAvance(), (numeroPosicion, idDispositivo))
+        cursor.close() 
+        conexion.commit()
+        return None

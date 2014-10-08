@@ -48,3 +48,4 @@ expiroTiempoPosiciones= 43
 noSePuedeInstanciarPadre= 44
 falloSMS= 45
 noSePuedeInstanciarPlacaAuxiliar= 46
+dispositivoRecuperado= 47

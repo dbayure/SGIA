@@ -1,11 +1,12 @@
 # -*- encoding: utf-8 -*-
     
-from __future__ import print_function
-PORT = '/dev/ttyUSB0'
-BAUDRATE = 115200
-PIN = 8152 # SIM card PIN (if any)
+
 from gsmmodem.modem import GsmModem
 import time
+import logging
+from suds.client import Client
+
+urlSMS= 'http://192.168.0.101:7789/?wsdl'
 
 class SMS(object):
     """
@@ -28,20 +29,16 @@ Dispositivo: """+ nombreDispositivo+ """
 Fecha: """+str(logEvento.get_fecha())[0:19]
         print(smsEnvio)
         try:
-            modem= GsmModem(PORT, BAUDRATE)
-            intensidad= modem.signalStrength()
-            if intensidad <= 0:
-                return 'F'
-            else:
-                modem.smsTextMode = False
-                modem.connect(PIN)
-               
-                for destinatario in listaDestinatarios:
-                    horaActual= int(time.strftime("%H"))
-                    if horaActual >= destinatario.get_hora_min() and horaActual < destinatario.get_hora_max():
-                        celular= destinatario.get_celular()
-                        modem.sendSms(celular, smsEnvio)
-                modem.close()
+            #logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+            client = Client(urlSMS)
+            
+            
+            for destinatario in listaDestinatarios:
+                horaActual= int(time.strftime("%H"))
+                if horaActual >= destinatario.get_hora_min() and horaActual < destinatario.get_hora_max():
+                    celular= destinatario.get_celular()
+                    resWS =  client.service.sendSMS(celular, smsEnvio)
+
         except:
             return 'F'
         

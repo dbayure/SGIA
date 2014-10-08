@@ -19,8 +19,9 @@ class Dispositivo(object):
     __numeroPuerto= None
     __activoSistema= None  
     __padre= None
+    __estadoAlerta= None
 
-    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre):
+    def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta):
         """
         Constructor de un dispositivo, recibe como parámetros:
             -idDispositivo : int
@@ -28,6 +29,7 @@ class Dispositivo(object):
             -modelo: String
             -numeroPuerto: int
             -activoSistema: Boolean
+            -estadoAlerta: Char(1)
         """
         self.__idDispositivo = idDispositivo
         self.__nombre = nombre
@@ -35,6 +37,7 @@ class Dispositivo(object):
         self.__numeroPuerto = numeroPuerto
         self.__activoSistema = activoSistema
         self.__padre = padre
+        self.__estadoAlerta= estadoAlerta
 
     def get_id_dispositivo(self):
         """
@@ -76,6 +79,12 @@ class Dispositivo(object):
         Devuelve idDispositivo como un int
         """
         return self.__padre
+    
+    def get_estado_alerta(self):
+        """
+        Devuelve si el dispositivo esta en estado de alerta
+        """
+        return self.__estadoAlerta
 
 
     def set_id_dispositivo(self, value):
@@ -112,6 +121,12 @@ class Dispositivo(object):
         Los estados pueden ser: A= Activo, E= Eliminado
         """
         self.__activoSistema = value
+        
+    def set_estado_alerta(self, value):
+        """
+        Asigna el estado de alerta del dispositivo
+        """
+        self.__estadoAlerta = value
         
     def set_padre(self, value):
         """

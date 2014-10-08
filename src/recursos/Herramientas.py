@@ -10,7 +10,7 @@ class Herramientas(object):
     __puertoWS= None
 
     def __init__(self):
-        self.__ipWS= '192.168.1.21'
+        self.__ipWS= '192.168.0.102'
         self.__puertoWS= 5001
         
     def instanciarIK (self, nroSerie):

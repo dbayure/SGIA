@@ -1,5 +1,4 @@
 eclipse.preferences.version=1
-encoding//PruebaTecnica/WS.py=utf-8
 encoding//src/bdd/Consultas.py=utf-8
 encoding//src/bdd/ManejadorBD.py=utf-8
 encoding//src/lecturas/Resultado.py=utf-8
@@ -28,7 +27,6 @@ encoding//src/placa/TipoPlaca.py=utf-8
 encoding//src/placa/TipoPuerto.py=utf-8
 encoding//src/recursos/Herramientas.py=utf-8
 encoding//src/recursos/Propiedades.py=utf-8
-encoding//src/ws/Comunicacion.py=utf-8
 encoding//src/ws/ResultadoAccionWS.py=utf-8
 encoding//src/ws/ResultadoCreacionWS.py=utf-8
 encoding//src/ws/ResultadoLecturaWS.py=utf-8
