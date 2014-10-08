@@ -10,42 +10,34 @@ class Resultado(object):
     __fecha=None
 
     def __init__(self, mensaje, fecha):
-        """
-        Constructor de la clase Resultado, recibe como parámetros:
-            -mensaje: Mensaje
-            -fecha: Date
+        """Constructor de la clase Resultado
+            @type mensaje: Mensaje
+            @param mensaje: Mensaje asociado al resultado. 
+            @type fecha: Datetime
+            @param fecha: Fecha y hora en que se crea el resultado. 
         """
         self.__mensaje = mensaje
         self.__fecha= fecha
 
     def get_mensaje(self):
         """
-        Devuelve el mensaje de un resultado como un Mensaje
-        """
+        @rtype: Mensaje
+        @return: Devuelve el mensaje de un resultado como un Mensaje"""
         return self.__mensaje
     
     def get_fecha(self):
         """
-        Devuelve la fecha de un resultado como un Date
-        """
+        @rtype: Datetime
+        @return: Devuelve la fecha de un resultado como un Datetime"""
         return self.__fecha
 
-
     def set_mensaje(self, value):
-        """
-        Asigna un Mensaje como mensaje de un resultado
-        """
+        """Asigna un Mensaje como mensaje de un resultado"""
         self.__mensaje = value
         
     def set_fecha(self, value):
-        """
-        Asigna un Date como fecha de un resultado
-        """
+        """Asigna un Datetime como fecha de un resultado"""
         self.__fecha = value
 
     mensaje = property(get_mensaje, set_mensaje, None, None)
     fecha = property(get_fecha, set_fecha, None, None)
-
-
-    
-        

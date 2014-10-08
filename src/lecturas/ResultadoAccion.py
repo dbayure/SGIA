@@ -14,48 +14,35 @@ class ResultadoAccion(Resultado):
     
 
     def __init__(self, mensaje, fecha, idGrupoActuadores, tipoAccion):
-        """
-        Constructor de la clase ResultadoAccion, recibe como parámetros:
-            -mensaje: Mensaje (Resultado)
-            -fecha: Date (Resultado)
-            -idGrupoActuadores: int (ResultadoAccion)
-            -tipoAccion: String (ResultadoAccion)
-        """
-        Resultado.__init__(self, 
-            mensaje, fecha)
+        """Constructor de la clase ResultadoAccion
+            @type idGrupoActuadores: int
+            @param idGrupoActuadores: Id del grupo de actuadores que disparó la acción 
+            @type tipoAccion: String
+            @param tipoAccion: Tipo de acción disparada."""
+        Resultado.__init__(self, mensaje, fecha)
         self.__idGrupoActuadores = idGrupoActuadores
         self.__tipoAccion = tipoAccion
 
     def get_id_grupo_actuadores(self):
         """
-        Devuelve el id de dispositivo de un ResultadoAccion como un int
-        """
+        @rtype: int
+        @return: Devuelve el id de dispositivo de un ResultadoAccion como un int"""
         return self.__idGrupoActuadores
-
 
     def get_tipo_accion(self):
         """
-        Devuelve el tipo de acción de un ResultadoAccion como un String
-        """
+        @rtype: String
+        @return: Devuelve el tipo de acción de un ResultadoAccion como un String"""
         return self.__tipoAccion
 
-
     def set_id_grupo_actuadores(self, value):
-        """
-        Asigna un int como id de dispositivo asociado a un ResultadoAccion
-        """
+        """Asigna un int como id de dispositivo asociado a un ResultadoAccion"""
         self.__idDispositivo = value
 
-
     def set_tipo_accion(self, value):
-        """
-        Asigna un String como tipo de accion de un ResultadoAccion
-        """
+        """Asigna un String como tipo de accion de un ResultadoAccion"""
         self.__tipoAccion = value
 
     idGrupoActuadores = property(get_id_grupo_actuadores, set_id_grupo_actuadores, None, None)
     tipoAccion = property(get_tipo_accion, set_tipo_accion, None, None)
-
-
     
-        
