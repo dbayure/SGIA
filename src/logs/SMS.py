@@ -1,19 +1,23 @@
 # -*- encoding: utf-8 -*-
-    
 
-from gsmmodem.modem import GsmModem
 import time
-import logging
 from suds.client import Client
-
-urlSMS= 'http://192.168.0.101:7789/?wsdl'
 
 class SMS(object):
     """
     La clase SMS disponibiliza las funciones para envío de notificaciones vía SMS
     """
+    
+    __urlSMS= None
+    
+    def __init__(self, hostSMS, puertoSMS):
+        """Constructor de la clase SMS.
+        @type urlSMS: String
+        @param urlSMS: url para invocar el servicio web para envío de SMS"""
+        self.__urlSMS= hostSMS+':'+puertoSMS+'/?wsdl'
 
     def enviarSMS(self, logEvento):
+        """Método para enviar SMS a todos los destinatarios asociados al logEvento pasado como parámetro"""
         tipoLogEvento= logEvento.get_tipo_log()
         listaDestinatarios= tipoLogEvento.get_lista_destinatarios()
         dispositivo= logEvento.get_dispositivo()
@@ -29,17 +33,11 @@ Dispositivo: """+ nombreDispositivo+ """
 Fecha: """+str(logEvento.get_fecha())[0:19]
         print(smsEnvio)
         try:
-            #logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
-            client = Client(urlSMS)
-            
-            
+            client = Client(self.__urlSMS)
             for destinatario in listaDestinatarios:
                 horaActual= int(time.strftime("%H"))
                 if horaActual >= destinatario.get_hora_min() and horaActual < destinatario.get_hora_max():
                     celular= destinatario.get_celular()
-                    resWS =  client.service.sendSMS(celular, smsEnvio)
-
+                    client.service.sendSMS(celular, smsEnvio)
         except:
             return 'F'
-        
-            

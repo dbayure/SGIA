@@ -1,16 +1,10 @@
 # -*- encoding: utf-8 -*-
-"""Modulo "dispositivo" contiene la definición de la clase dispositivo"""
 
 class Dispositivo(object):
     """
     clase abstracta que contiene los atributos y funciones básicas de los dispositivos.
-    Sus especializaciones serán "actuador", "sensor" y "placaAuxiliar"
-    Sus atributos son:
-        -idDispositivo
-        -nombre
-        -modelo
-        -numeroPuerto
-        -activoSistema
+    Sus especializaciones serán "actuador", "actuadorAvance", "sensor" y "placaAuxiliar"
+    Sus atributos son: idDispositivo, nombre, modelo, numeroPuerto, padre, activoSistema y estadoAlerta
     """
         
     __idDispositivo= None
@@ -22,15 +16,21 @@ class Dispositivo(object):
     __estadoAlerta= None
 
     def __init__(self, idDispositivo, nombre, modelo, numeroPuerto, activoSistema, padre, estadoAlerta):
-        """
-        Constructor de un dispositivo, recibe como parámetros:
-            -idDispositivo : int
-            -nombre: String
-            -modelo: String
-            -numeroPuerto: int
-            -activoSistema: Boolean
-            -estadoAlerta: Char(1)
-        """
+        """Constructor de un dispositivo.
+        @type idDispositivo: int
+        @param idDispositivo: Identificador del actuador
+        @type nombre: String
+        @param nombre: Nombre del dispositivo
+        @type modelo: String
+        @param modelo: Modelo del dispositivo
+        @type numeroPuerto: int
+        @param numeroPuerto: Número de puerto al que está conectado el dispositivo
+        @type activoSistema: Char(1)
+        @param activoSistema: Indicador del estado del dispositivo en el sistema. (S/N)
+        @type padre: int
+        @param padre: Identificador del dispositivo padre
+        @type estadoAlerta: Char(1)
+        @param estadoAlerta: Indicador si el dispositivo está en estado de alerta. (S/N)"""
         self.__idDispositivo = idDispositivo
         self.__nombre = nombre
         self.__modelo = modelo
@@ -41,98 +41,72 @@ class Dispositivo(object):
 
     def get_id_dispositivo(self):
         """
-        Devuelve idDispositivo como un int
-        """
+        @rtype: int
+        @return: Devuelve el identificador de un dispositivo"""
         return self.__idDispositivo
-
 
     def get_nombre(self):
         """
-        Devuelve el nombre del dispositivo como un String
-        """
+        @rtype: String
+        @return: Devuelve el nombre del dispositivo"""
         return self.__nombre
-
 
     def get_modelo(self):
         """
-        Devuelve el modelo del dispositivo como un String
-        """
+        @rtype: String
+        @return: Devuelve el modelo del dispositivo"""
         return self.__modelo
-
 
     def get_numero_puerto(self):
         """
-        Devuelve el numero de puerto en el que esta el dispositivo como un int
-        """
+        @rtype: int
+        @return: Devuelve el numero de puerto en el que esta conectado el dispositivo"""
         return self.__numeroPuerto
-
 
     def get_activo_sistema(self):
         """
-        Devuelve el estado del dispositivo en el sistema, como un char(1)
-        Los estados pueden ser: A= Activo, E= Eliminado
-        """
+        @rtype: Char(1)
+        @return: Devuelve el estado del dispositivo en el sistema, estos pueden ser: A= Activo, E= Eliminado"""
         return self.__activoSistema
     
     def get_padre(self):
         """
-        Devuelve idDispositivo como un int
-        """
+        @rtype: int
+        @return: Devuelve identificador del dispositivo padre"""
         return self.__padre
     
     def get_estado_alerta(self):
         """
-        Devuelve si el dispositivo esta en estado de alerta
-        """
+        @rtype: 
+        @return: Devuelve si el dispositivo esta en estado de alerta (S/N)"""
         return self.__estadoAlerta
 
-
     def set_id_dispositivo(self, value):
-        """
-        Asigna un id de dispositivo, recibe un int
-        """
+        """Asigna un int como identificador del dispositivo"""
         self.__idDispositivo = value
 
-
     def set_nombre(self, value):
-        """
-        Asigna un nombre al dispositivo, recibe un String
-        """
+        """Asigna un String como nombre del dispositivo"""
         self.__nombre = value
 
-
     def set_modelo(self, value):
-        """
-        Asigna un modelo al dispositivo, recibe un String
-        """
+        """Asigna un String como modelo del dispositivo"""
         self.__modelo = value
 
-
     def set_numero_puerto(self, value):
-        """
-        Asigna un numero de puerto en el que esta conectado el dispositivo, recibe un int
-        """
+        """Asigna un int como número de puerto en el que esta conectado el dispositivo"""
         self.__numeroPuerto = value
 
-
     def set_activo_sistema(self, value):
-        """
-        Asigna el estado del dispositivo en el sistema, recibe un Char(1)
-        Los estados pueden ser: A= Activo, E= Eliminado
-        """
+        """Asigna un char(1) como el estado del dispositivo en el sistema. Los estados pueden ser: A= Activo, E= Eliminado"""
         self.__activoSistema = value
         
     def set_estado_alerta(self, value):
-        """
-        Asigna el estado de alerta del dispositivo
-        """
+        """Asigna un char(1) como indicador del estado de alerta del dispositivo (S/N)"""
         self.__estadoAlerta = value
         
     def set_padre(self, value):
-        """
-        Asigna el estado del dispositivo en el sistema, recibe un Char(1)
-        Los estados pueden ser: A= Activo, E= Eliminado
-        """
+        """Asigna un char(1) como el estado del dispositivo en el sistema, estos pueden ser: A= Activo, E= Eliminado"""
         self.__padre = value
 
     idDispositivo = property(get_id_dispositivo, set_id_dispositivo, None, None)

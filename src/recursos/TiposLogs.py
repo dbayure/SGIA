@@ -15,3 +15,4 @@ noSePuedeInstanciarPlacaAuxiliar= 10
 actuadorRecuperado= 11
 sensorRecuperado= 12
 placaAuxiliarRecuperada= 13
+noSeEncuentraSensor= 14

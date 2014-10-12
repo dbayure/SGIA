@@ -19,6 +19,16 @@ class Consultas(object):
         consulta="select nroSeriePlaca from parametros"
         return consulta
     
+    def selectEstadoAlertaSistema(self):
+        """Devuelve la consulta para obtener el estado de alerta del sistema."""
+        consulta="select estadoAlerta from parametros"
+        return consulta
+    
+    def selectCantidadDispositivosEnAlerta(self):
+        """Devuelve la consulta para obtener la cantidad de dispositivos en estado de alerta"""
+        consulta= "select count(*) from dispositivos where activoSistema = 'S' and estadoAlerta = 'S'"
+        return consulta
+    
     def selectPeriodicidadLecturaPlaca(self):
         """Devuelve la consulta para obtener la periodicidad de lecturas de la placa."""
         consulta="select periodicidadLecturas from parametros"
@@ -392,6 +402,11 @@ class Consultas(object):
     def updateEstadoPlaca(self):
         """Devuelve la consulta para actualizar el estado del sistema"""
         consulta= "update parametros set estadoPlaca=?"
+        return consulta
+    
+    def updateEstadoAlertaSistema(self):
+        """Devuelve la consulta para actualizar el estado de alerta del sistema"""
+        consulta= "update parametros set estadoAlerta=?"
         return consulta
     
     def updatePosicionActuadorAvance(self):

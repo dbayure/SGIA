@@ -1,32 +1,25 @@
 # -*- encoding: utf-8 -*-
 """
 Módulo principal del sistema, es el encargado de iniciar la ejecución del mismo.
-Debe instanciar la placa y el servidor de WS, además es encargado de comunicarse con la 
-capa de persistencia para guardar y recuperar datos.
-Tiene como atributos una instancia única de placa y una instancia única de ws.
+Debe instanciar la placa y el servidor de WS, además es encargado de comunicarse con la capa de persistencia para guardar y recuperar datos.
+Tiene como atributos una instancia única de placa y una instancia única de WS.
 """
-from src.bdd.ManejadorBD import ManejadorBD
 from src.placa.Placa import Placa
-from Phidgets.PhidgetException import PhidgetException
-from Phidgets.Devices.InterfaceKit import InterfaceKit
 from src.recursos.Herramientas import Herramientas
 from src.placa.PlacaAuxiliar import PlacaAuxiliar
-from src.recursos import Propiedades, Mensajes, TiposLogs
+from src.recursos import Propiedades, TiposLogs, Mensajes
 from src.lecturas.ResultadoLectura import ResultadoLectura
 from datetime import datetime
 from src.lecturas.ResultadoAccion import ResultadoAccion
 from src.logs.Mensaje import Mensaje
 from src.bdd.ManejadorBD import ManejadorBD
-from src.recursos import Mensajes
 from soaplib.wsgi_soap import SimpleWSGISoapApp
 from soaplib.service import soapmethod
 from soaplib.serializers.primitive import String, Integer
 import threading
 from src.ws.ResultadoLecturaWS import ResultadoLecturaWS
-from src.lecturas.Resultado import Resultado
 from src.ws.ResultadoAccionWS import ResultadoAccionWS
 from src.ws.ResultadoCreacionWS import ResultadoCreacionWS
-import math
 import time
 from src.placa.ActuadorAvance import ActuadorAvance
 from src.logs.LogEvento import LogEvento
@@ -36,9 +29,9 @@ __placa=None
 __ws=None
 
 def iniciarPlaca():
-    """
-    Método que inicializa la placa controladora y carga sus estructuras desde la BD
-    """
+    """Método para inicializar la placa controladora y cargar sus estructuras desde la BD
+    @rtype: Placa
+    @return: Devuelve la instancia única de la placa con todas sus estructuras cargadas"""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     estadoSistema= mbd.obtenerEstadoPlaca(con)
@@ -47,6 +40,7 @@ def iniciarPlaca():
     periodicidadNiveles= mbd.obtenerPeriodicidadNivelesPlaca(con)
     listaDispositivos= mbd.obtenerListaDispositivos(con)
     listaFactores= mbd.obtenerListaFactores(con)
+    estadoAlerta= mbd.obtenerEstadoAlertaSistema(con)
     for factor in listaFactores:
         idFactor= factor.get_id_factor()
         listaSensores= list()
@@ -81,7 +75,6 @@ def iniciarPlaca():
                         sensor= obtenerDispositivoSegunId(listaDispositivos, idSensor)
                         listaSensores.append(sensor)
                     posicion.set_lista_sensores(listaSensores)
-      
         grupo.set_lista_actuadores(listaActuadores)
     #aca la lista de grupos de actuadores ya está actualizada con la lista de actuadores de cada una 
     #Hay que cargar la lista de niveles de severidad
@@ -108,14 +101,13 @@ def iniciarPlaca():
             listaGruposEstadosPerfil.append(tupla)
         perfil.set_lista_grupo_actuadores_estado(listaGruposEstadosPerfil)
         nivel.set_perfil_activacion(perfil)
-
     mbd.cerrarConexion()
     #Tengo todo lo necesario para instanciar el objeto Placa
     h= Herramientas()
     ik= h.instanciarIK(int(nroSerie))
     placa= None
     if ik <> None:
-        placa= Placa(nroSerie, estadoSistema, periodicidadLecturas, periodicidadNiveles, listaDispositivos, listaGrupoActuadores, listaFactores, listaNivelesSeveridad) 
+        placa= Placa(nroSerie, estadoSistema, periodicidadLecturas, periodicidadNiveles, listaDispositivos, listaGrupoActuadores, listaFactores, listaNivelesSeveridad, estadoAlerta) 
         placa.set_ik(ik)
         chequearPlacasAuxiliares(listaDispositivos)
     else:
@@ -126,6 +118,7 @@ def iniciarPlaca():
     return placa
 
 def chequearPlacasAuxiliares(listaDispositivos):
+    """Método que permite verificar que todas las placas auxiliares del sistema hayan podidio instanciar su objeto IK, y en caso contrario emitir el LogEvento, y actualizar su estado de alerta."""
     for dispositivo in listaDispositivos:
         if isinstance(dispositivo, (PlacaAuxiliar)):
             if dispositivo.get_ik() == None and dispositivo.get_estado_alerta() == 'N':
@@ -145,9 +138,11 @@ def chequearPlacasAuxiliares(listaDispositivos):
                 mbd.cambiarEstadoAlerta(con, dispositivo.get_id_dispositivo(), 'N')
                 con.close()
             chequearPlacasAuxiliares(dispositivo.get_lista_dispositivos())
-    
 
 def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
+    """Método para buscar y recuperar un dispositivo instanciado en el sistema dado su identificador.
+    @rtype: Dispositivo
+    @return: Devuelve el objeto Dispositivo al que corresponde el idDispositivo pasado como parámetro""" 
     dispositivo=None
     i=0
     control= False
@@ -162,22 +157,29 @@ def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
     return dispositivo
 
 class iniciarWS(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada para publicar el WS como un nuevo hilo de ejecución del sistema."""
     def __init__(self):
         threading.Thread.__init__(self)
     
     def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
         try:
             from wsgiref.simple_server import make_server
-            server = make_server('192.168.0.101', 7790, Comunicacion())
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            hostPuerto= mbd.obtenerHostPuertoWS(con)
+            server = make_server(hostPuerto[0], int(hostPuerto[1]), Comunicacion())
             server.serve_forever()
-        except ImportError:
-            print ("Error: example server code requires Python >= 2.5")
+        except:
+            print ("Error al iniciar WS")
             
 class tomarLecturas(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada iniciar las lecturas automáticas de factores como un nuevo hilo de ejecución del sistema."""
     def __init__(self):
         threading.Thread.__init__(self)
     
     def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
         placa= getPlaca()
         listaFactores= placa.get_lista_factores()
         while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
@@ -185,11 +187,68 @@ class tomarLecturas(threading.Thread):
                 procesarLecturaFactor(factor)
             time.sleep(placa.get_periodicidad_lecturas())
             
-class procesarNiveles(threading.Thread):
+class estadoAlertaSistema(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada iniciar el análisis de estado de alerta del sistema como un nuevo hilo de ejecución."""
     def __init__(self):
         threading.Thread.__init__(self)
     
     def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
+        placa= getPlaca()
+        while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            cantEstadoAlerta=mbd.obtenerCantidadDispositivosAlerta(con)
+            if cantEstadoAlerta == 0:
+                placa.set_estado_alerta('N')
+                con= mbd.getConexion()
+                mbd.cambiarEstadoAlertaSistema(con, 'N')
+                con.commit()
+                con.close()
+            else:
+                placa.set_estado_alerta('S')
+                con= mbd.getConexion()
+                mbd.cambiarEstadoAlertaSistema(con, 'S')
+                con.commit()
+                con.close()
+            time.sleep(placa.get_periodicidad_lecturas())
+            
+class procesarEstadoAlertaSistema(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada iniciar el procesado de estado de alerta del sistema y la emisión de notificaciones visuales como un nuevo hilo de ejecución."""
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
+        placa= getPlaca()
+        ik= placa.get_ik()
+        while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+            i= 1
+            while (placa.get_estado_alerta() == 'S'):
+                ik.setOutputState((i-1), 0)
+                ik.setOutputState(i, 1)
+                time.sleep(2)
+                if i == 3:
+                    ik.setOutputState(3, 0)
+                    i= 1
+                else:
+                    i= i+1
+            if (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+                ik.setOutputState(0, 1)
+                time.sleep(1)
+                ik.setOutputState(1, 0)
+                time.sleep(1)
+                ik.setOutputState(2, 0)
+                time.sleep(1)
+                ik.setOutputState(3, 0)
+            
+class procesarNiveles(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada iniciar el procesado de niveles de severidad  de forma automática, como un nuevo hilo de ejecución del sistema."""
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
         placa= getPlaca()
         listaNiveles= placa.get_lista_niveles_severidad()
         while (placa.get_estado_sistema() == 'A'):
@@ -208,10 +267,8 @@ class procesarNiveles(threading.Thread):
                         listaNivelesValidos.append(nivel)
                 #ordenar lista por prioridad
                 listaNivelesValidos.sort()
-                """Después sacar esta salida a consola"""
                 for nivel in listaNivelesValidos:
                     print("Nivel valido: "+nivel.get_nombre()+"; prioridad: "+str(nivel.get_prioridad()))
-                """hasta acá"""
                 listaActivacion= list()
                 for nivel in listaNivelesValidos:
                     perfil= nivel.get_perfil_activacion()
@@ -222,8 +279,7 @@ class procesarNiveles(threading.Thread):
                             i=i+1
                         if i >= len(listaActivacion):
                             listaActivacion.append(grupoEstado)
-                """YA TENGO TODO LO NECESARIO PARA ACTUAR SOBRE LOS GRUPOS DE ACTUADORES SEGÚN SE HAYA ESPECIFICADO EN EL 
-                PERFIL DE ACTIVACION DE CADA NIVEL DE SEVERIDAD QUE SE ESTÁ CUMPLIENDO"""
+                """YA TENGO TODO LO NECESARIO PARA ACTUAR SOBRE LOS GRUPOS DE ACTUADORES SEGÚN SE HAYA ESPECIFICADO EN EL PERFIL DE ACTIVACION DE CADA NIVEL DE SEVERIDAD QUE SE ESTÁ CUMPLIENDO"""
                 for grupoEstado in listaActivacion:
                     grupo= grupoEstado[0]
                     estado= grupoEstado[1]
@@ -236,9 +292,44 @@ class procesarNiveles(threading.Thread):
                             apagarGrupoActuadores(grupo)
                         else:
                             print ("Estado no valido para perfil de activación")
-            
+                            
+def iniciarHiloWS():
+    """Método para iniciar WS como hilo secundario del sistema"""
+    t = iniciarWS()
+    t.start()
+    print("WS publicado")
+    
+def iniciarHiloLecturas():  
+    """Método para iniciar el procesado de lecturas automático como hilo secundario del sistema"""  
+    t2= tomarLecturas()
+    t2.start()
+    print('Lecturas automaticas iniciadas')
+    
+def iniciarHiloNiveles():      
+    """Método para iniciar el procesado de niveles de severidad automático como hilo secundario del sistema"""    
+    t3= procesarNiveles()
+    t3.start()
+    print('Procesado niveles iniciado')
+    
+def iniciarHiloEstadoAlertaSistema():  
+    """Método para iniciar el análisis del estado de alerta del sistema como hilo secundario del mismo"""        
+    t4= estadoAlertaSistema()
+    t4.start()
+    print('Analisis estado alerta sistema iniciado')
+    
+def iniciarHiloProcesarEstadoAlertaSistema(): 
+    """Método para iniciar el procesado del estado de alerta del sistema y activación de notificaciones visuales, como hilo secundario del sistema"""      
+    t5= procesarEstadoAlertaSistema()
+    t5.start()
+    print('Procesado estado alerta sistema iniciado')
             
 def analizarCumplimientoNivel( listaValoresLecturas, minimo, maximo):
+    """Método para analizar si cumplen las condiciones que determinan el cumplimiento de un nivel de severidad.
+    @param listaValoresLecturas: Lista de las últimas lecturas del factor asociado al nivel de severidad
+    @param minimo: Rango mínimo de cumplimiento del nivel de severidad
+    @param maximo: Rango máximo de cumplimiento del nivel de severidad
+    @rtype: boolean
+    @return: Devuelve si se cumple el nivel según los parámetros recibidos"""
     cantidadLecturas= len(listaValoresLecturas)
     objetivoLecturas= int((Propiedades.porcentajeLecturasProcNiveles * cantidadLecturas) / 100)
     coincidencias= 0
@@ -249,12 +340,19 @@ def analizarCumplimientoNivel( listaValoresLecturas, minimo, maximo):
     return cumple  
 
 def apagarTodo():
+    """Método utilizado para apagar todos los dispositivos actuadores del sistema, y los elementos de alertas visuales"""
     listaGruposActuadores= __placa.get_lista_grupo_actuadores()
     for grupoActuadores in listaGruposActuadores:
         if grupoActuadores.get_de_avance() == 'N':
             apagarGrupoActuadores(grupoActuadores)
+    ik= __placa.get_ik()
+    ik.setOutputState(0, 0)
+    ik.setOutputState(1, 0)
+    ik.setOutputState(2, 0)
+    ik.setOutputState(3, 0)
 
 def cambiarEstadoPlaca(estado):
+    """Método para cambiar el estado del sistema."""
     placa= getPlaca()
     estadoActual= placa.get_estado_sistema()
     placa.set_estado_sistema(estado)
@@ -266,19 +364,26 @@ def cambiarEstadoPlaca(estado):
     if estado == 'I':
         """Si paso a estado inactivo desde cualquier otro estado debo apagar todos los dispositivos"""
         apagarTodo()
+        placa.set_estado_alerta('N')
     elif estado == 'M':
         if estadoActual == 'I' or estadoActual == 'C':
             __placa=iniciarPlaca()
             iniciarHiloLecturas()
+            iniciarHiloEstadoAlertaSistema()
+            iniciarHiloProcesarEstadoAlertaSistema()
     elif estado == 'A':
         if estadoActual == 'I' or estadoActual == 'C':
             __placa=iniciarPlaca()
             iniciarHiloLecturas()
+            iniciarHiloEstadoAlertaSistema()
+            iniciarHiloProcesarEstadoAlertaSistema()
         iniciarHiloNiveles()
     return None
 
 def obtenerIkPadre (dispositivo):
-    """Devuelve el interface kit que controla al dispositivo pasado como parámetro"""
+    """
+    @rtype: InterfaceKit
+    @return: Devuelve el interface kit que controla al dispositivo pasado como parámetro"""
     padre= dispositivo.get_padre()
     if padre == None:
         return __placa.get_ik()
@@ -286,33 +391,42 @@ def obtenerIkPadre (dispositivo):
         return padre.get_ik()
 
 def lecturaSensor(sensor):
-    """Método que permite obtener una lectura de un sensor conectado a un puerto analógico o digital,
-    recibe como parámetros el sensor del que se pretende obtener la lectura y el interface kit que puede 
-    interactuar con dicho sensor. Devuelve la lectura convertida a su valor final luego de aplicar la fórmula 
-    propia del sensor"""
+    """Método que permite obtener una lectura de un sensor conectado a un puerto analógico ó digital,
+    recibe como parámetro el sensor del que se pretende obtener la lectura.
+    @rtype: float
+    @return: Devuelve la lectura convertida a su valor final luego de aplicar la fórmula de conversión propia del sensor, ó -999 si hubo algún error"""
     ik= obtenerIkPadre (sensor)
     tipoPuerto= sensor.get_tipo_puerto()
     if tipoPuerto.get_nombre() == "analogico":
         try: 
-            valor=ik.getSensorValue(sensor.get_numero_puerto())
-            if valor == 0:
+            l=ik.getSensorValue(sensor.get_numero_puerto())
+            if l < 10:
                 temp=-999
+                if sensor.get_estado_alerta() == 'N':
+                    idTipoLog= TiposLogs.noSeEncuentraSensor
+                    idMensaje= Mensajes.noSeEncuentraSensor
+                    generarLogEvento(idTipoLog, idMensaje, sensor)
+                    sensor.set_estado_alerta('S')
+                    mbd= ManejadorBD()
+                    con= mbd.getConexion()
+                    mbd.cambiarEstadoAlerta(con, sensor.get_id_dispositivo(), 'S')
+                    con.close()
             else:
-                l=valor
                 temp= eval(sensor.get_formula_conversion())
-        except PhidgetException as e:
+        except:
             temp= -999
     elif tipoPuerto.get_nombre() == "e-digital":
         try: 
             temp= ik.getInputState(sensor.get_numero_puerto())
-        except PhidgetException as e:
+        except:
             temp= -999
     return temp
 
 def encenderActuador(actuador):
-    """
-    Método para encender un actuador perteneciente a un grupo de actuadores
-    """
+    """Método para encender un actuador perteneciente a un grupo de actuadores.
+    @param actuador: Actuador que se desea encender
+    @rtype: Char(1)
+    @return: Devuelve el estado el que quedó el actuador ó 'F' si hubo algún error."""
     estado= actuador.get_estado_actuador()
     if ( estado == 'A'):
         try:
@@ -328,15 +442,15 @@ def encenderActuador(actuador):
                 con.close()
             else:
                 estado= 'F'
-                
-        except PhidgetException as e:
+        except:
             estado= 'F'
     return estado
 
 def apagarActuador(actuador):
-    """
-    Método para apagar un actuador perteneciente a un grupo de actuadores
-    """
+    """Método para apagar un actuador perteneciente a un grupo de actuadores.
+    @param actuador: Actuador que se desea apagar
+    @rtype: Char(1)
+    @return: Devuelve el estado el que quedó el actuador ó 'F' si hubo algún error."""
     estado= actuador.get_estado_actuador()
     if (estado == 'E'):
         try:
@@ -352,14 +466,15 @@ def apagarActuador(actuador):
                 con.close()
             else:
                 estado='F'
-        except PhidgetException as e:
+        except:
             estado= 'F'
     return estado
 
 def encenderGrupoActuadores(grupo):
-    """
-    Método para encender un grupo de actuadores
-    """
+    """Método para encender un grupo de actuadores.
+    @param grupo: GrupoActuador que se desea encender
+    @rtype: ResultadoAccion
+    @return: Devuelve el ResultadoAccion obtenido al intentar encender el grupo de actuadores"""
     listaAcciones= list()
     listaActuadores= grupo.get_lista_actuadores()
     for actuador in listaActuadores:
@@ -444,9 +559,10 @@ def encenderGrupoActuadores(grupo):
     return resultadoAccion
 
 def apagarGrupoActuadores(grupo):
-    """
-    Método para apagar un grupo de actuadores
-    """
+    """Método para apagar un grupo de actuadores.
+    @param grupo: GrupoActuador que se desea apagar
+    @rtype: ResultadoAccion
+    @return: Devuelve el ResultadoAccion obtenido al intentar apagar el grupo de actuadores"""
     listaAcciones= list()
     listaActuadores= grupo.get_lista_actuadores()
     for actuador in listaActuadores:
@@ -524,6 +640,9 @@ def apagarGrupoActuadores(grupo):
     return resultadoAccion
 
 def crearSensor (nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
+    """Método para crear y persisitir un dispositivo Sensor en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del dispositivo creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idDispositivo=mbd.insertarDispositivo(con, nombre, modelo, nroPuerto)
@@ -533,6 +652,9 @@ def crearSensor (nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idP
     return idDispositivo
 
 def crearActuador (nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
+    """Método para crear y persisitir un dispositivo Actuador en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del dispositivo creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idDispositivo=mbd.insertarDispositivo(con, nombre, modelo, nroPuerto)
@@ -542,6 +664,9 @@ def crearActuador (nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPl
     return idDispositivo
 
 def crearActuadorAvance (nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+    """Método para crear y persisitir un dispositivo ActuadorAvance en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del dispositivo creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idDispositivo=mbd.insertarDispositivo(con, nombre, modelo, nroPuerto)
@@ -551,6 +676,9 @@ def crearActuadorAvance (nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTi
     return idDispositivo
 
 def crearPlacaAuxiliar (nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre):
+    """Método para crear y persisitir un dispositivo PlacaAuxiliar en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del dispositivo creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idDispositivo=mbd.insertarDispositivo(con, nombre, modelo, nroPuerto)
@@ -560,6 +688,9 @@ def crearPlacaAuxiliar (nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlac
     return idDispositivo
 
 def crearTipoPlaca (nombre):
+    """Método para crear y persisitir un TipoPlaca en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del TipoPlaca creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idTipoPlaca=mbd.insertarTipoPlaca(con, nombre)
@@ -567,13 +698,41 @@ def crearTipoPlaca (nombre):
     return idTipoPlaca
 
 def crearTipoActuador (nombre):
+    """Método para crear y persisitir un TipoActuador en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del TipoActuador creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idTipoActuador=mbd.insertarTipoActuador(con, nombre)
     con.commit()
     return idTipoActuador
 
+def crearFactor(nombre, unidad, valorMin, valorMax, umbral):
+    """Método para crear y persisitir un Factor en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del Factor creado."""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    idFactor=mbd.insertarFactor(con, nombre, unidad, valorMin, valorMax, umbral)
+    con.commit()
+    con.close()
+    return idFactor
+
+def crearGrupoActuadores(nombre, deAvance):
+    """Método para crear y persisitir un GrupoActuador en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del GrupoActuador creado."""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    idGrupo=mbd.insertarGrupoActuadores(con, nombre, deAvance)
+    con.commit()
+    con.close()
+    return idGrupo
+
 def crearNivelSeveridad (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
+    """Método para crear y persisitir un NivelSeveridad en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del NivelSeveridad creado."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     idNivel=mbd.insertarNivelSeveridad(con, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo)
@@ -582,6 +741,7 @@ def crearNivelSeveridad (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
     return idNivel
 
 def agregarFilaPerfilActivacion (idPerfilActivacion, idGrupoActuadores, estado):
+    """Método para crear y persisitir una nueva fila perteneciente a un PerfilActivacion en el sistema."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.insertarFilaPerfilActivacion(con, idPerfilActivacion, idGrupoActuadores, estado)
@@ -590,6 +750,7 @@ def agregarFilaPerfilActivacion (idPerfilActivacion, idGrupoActuadores, estado):
     return None
 
 def agregarPosicionActuadorAvance (idActuadorAvance, numeroPosicion, descripcion, valor):
+    """Método para crear y persisitir una Posicion perteneciente a un ActuadorAvance."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.insertarPosicionActuadorAvance(con, idActuadorAvance, numeroPosicion, descripcion, valor)
@@ -598,6 +759,7 @@ def agregarPosicionActuadorAvance (idActuadorAvance, numeroPosicion, descripcion
     return None
 
 def agregarSensorPosicionActuadorAvance (idSensor, idActuadorAvance, numeroPosicion):
+    """Método para crear y persisitir un Sensor asociado a una Posicion perteneciente a un ActuadorAvance."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.insertarSensorPosicionActuadorAvance(con, idSensor, idActuadorAvance, numeroPosicion)
@@ -606,9 +768,9 @@ def agregarSensorPosicionActuadorAvance (idSensor, idActuadorAvance, numeroPosic
     return None
 
 def analizarLecturas(listaLecturas, factor):
-    """
-    Método para procesar una lista de lecturas de un factor pasado como parámetro.
-    Realiza la selección de lecturas válidas y determina si alguna de estas está fuera de rango
+    """Método para procesar una lista de lecturas de un factor pasado como parámetro. Realiza la selección de lecturas válidas y determina si alguna de estas está fuera de rango
+    @rtype: float
+    @return: Devuelve el la lectura promedio de las lecturas válidas, este luego es utilizado como la lectura del factor.
     """
     lecturasOk= list()
     listaValores= list()
@@ -658,8 +820,6 @@ def analizarLecturas(listaLecturas, factor):
                         con= mbd.getConexion()
                         mbd.cambiarEstadoAlerta(con, sensor.get_id_dispositivo(), 'S')
                         con.close()
-                    
-            
     else:
         lectura= listaLecturas[0][0]
         if lectura < factor.get_valor_min() or lectura > factor.get_valor_max() :
@@ -694,10 +854,10 @@ def analizarLecturas(listaLecturas, factor):
         return resultado
 
 def procesarLecturaFactor(factor): 
-    """Método que posibilita tomar lecturas de todos los sensores pertenecientes a un factor y devuelve
-    un promedio de dichas lecturas como una única lectura perteneciente al factor.
-    Recibe como parámetros un factor y un interfaceKit que permite interactuar con cada sensor.
-    Devuelve una lectura promedio en formato float"""
+    """Método que posibilita tomar lecturas de todos los sensores pertenecientes a un factor y devuelve un promedio de dichas lecturas como una única lectura final del factor.
+    @param factor: Factor sobre el que se desea procesar sus lecturas
+    @rtype: float
+    @return: Valor de lectura final del Factor."""
     listaSensores= factor.get_lista_sensores()
     listaLecturas= list()
     for sensor in listaSensores:
@@ -709,7 +869,6 @@ def procesarLecturaFactor(factor):
         con.close()
         if lectura[0] <> -999:
             listaLecturas.append(lectura)
-        
     lecturaFinal= -999
     if len(listaLecturas) == 0:
         idMensaje= Mensajes.lecturaError
@@ -734,26 +893,8 @@ def procesarLecturaFactor(factor):
     con.close()
     return resultadoLectura
 
-def crearFactor(nombre, unidad, valorMin, valorMax, umbral):
-    mbd= ManejadorBD()
-    con= mbd.getConexion()
-    idFactor=mbd.insertarFactor(con, nombre, unidad, valorMin, valorMax, umbral)
-    con.commit()
-    con.close()
-    return idFactor
-
-def crearGrupoActuadores(nombre, deAvance):
-    mbd= ManejadorBD()
-    con= mbd.getConexion()
-    idGrupo=mbd.insertarGrupoActuadores(con, nombre, deAvance)
-    con.commit()
-    con.close()
-    return idGrupo
-
 def eliminarFactor(idFactor):
-    """
-    Método para realizar el eliminado lógico de un factor del sistema
-    """
+    """Método para realizar el eliminado lógico de un factor del sistema."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoFactor(con, idFactor)
@@ -762,9 +903,7 @@ def eliminarFactor(idFactor):
     return None
 
 def eliminarDispositivo(idDispositivo):
-    """
-    Método para realizar el eliminado lógico de un dispositivo del sistema
-    """
+    """Método para realizar el eliminado lógico de un dispositivo del sistema."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoDispositivo(con, idDispositivo)
@@ -773,9 +912,7 @@ def eliminarDispositivo(idDispositivo):
     return None
 
 def eliminarGrupoActuadores(idGrupoActuadores):
-    """
-    Método para realizar el eliminado lógico de un grupo de actuadores del sistema
-    """
+    """Método para realizar el eliminado lógico de un grupo de actuadores del sistema."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoGrupoActuadores(con, idGrupoActuadores)
@@ -784,9 +921,7 @@ def eliminarGrupoActuadores(idGrupoActuadores):
     return None
 
 def eliminarNivelSeveridad(idNivelSeveridad):
-    """
-    Método para realizar el eliminado lógico de un grupo de actuadores del sistema
-    """
+    """Método para realizar el eliminado lógico de un nivel de severidad del sistema."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoNivelSeveridad(con, idNivelSeveridad)
@@ -795,9 +930,7 @@ def eliminarNivelSeveridad(idNivelSeveridad):
     return None
 
 def eliminarFilaPerfilActivacion(idPerfil, idGrupoActuadores):
-    """
-    Método para realizar el eliminado lógico de un grupo de actuadores del sistema
-    """
+    """Método para realizar el eliminado lógico de una fila perteneciente a un perfil de activación del sistema."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.eliminadoLogicoFilaPerfilActivacion(con, idPerfil, idGrupoActuadores)
@@ -806,6 +939,10 @@ def eliminarFilaPerfilActivacion(idPerfil, idGrupoActuadores):
     return None
 
 def generarLogEvento(idTipoLog, idMensaje, dispositivo):
+    """Método para generar y persistir un LogEvento, e invocar a los mecanismos de notificación asociados al TipoLog al que pertenece el LogEvento generado.
+    @param idTipoLog: Identificador del TipoLog al que pertenece el LogEvento
+    @param idMensaje: Identificador del mensaje asociado al LogEvento
+    @param dispositivo: Dispositivo que genera el LogEvento."""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     tipoLogEvento=mbd.obtenerTipoLogEvento(con, idTipoLog)
@@ -815,24 +952,25 @@ def generarLogEvento(idTipoLog, idMensaje, dispositivo):
         idLogEvento=mbd.insertarLogEvento(con, idTipoLog, dispositivo.get_id_dispositivo(), idMensaje, fecha)
     else:
         idLogEvento=mbd.insertarLogEvento(con, idTipoLog, 0, idMensaje, fecha)
-    con.close()
     logEvento= LogEvento(idLogEvento, tipoLogEvento, dispositivo, mensaje, fecha)
     if (tipoLogEvento.get_enviar_sms() == 'S'):
-        print('ENVIAR SMS')
-        sms= SMS()
+        hostPuerto= mbd.obtenerHostPuertoWS_SMS(con)
+        sms= SMS(hostPuerto[0], hostPuerto[1])
         if sms.enviarSMS(logEvento) == 'F':
             idTipoLog= TiposLogs.errorSMS
             idMensaje= Mensajes.falloSMS
             generarLogEvento(idTipoLog, idMensaje, 0)
-        """LLAMAR A METODO DE ENVIO DE SMS"""
     if (tipoLogEvento.get_enviar_mail() == 'S'):
         print('ENVIAR MAIL')
         """LLAMAR A METODO DE ENVIO DE MAIL POR WS"""
+    con.close()
 
 def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
-    """
-    Método para cambiar de posicion un actuador de avance
-    """
+    """Método para cambiar de posicion un actuador de avance.
+    @param actuadorAvance: Actuador de avance al que se pretende cambiar de posición
+    @param nroDestino: Número de posición al que se pretende cambiar el actuador de avance
+    @rtype: Char(1)
+    @return: Devuelve la posición en la que quedó el actuador de avance, ó 'F' en caso de que haya ocurrido algún error."""
     posicionActual= actuadorAvance.get_posicion()
     if nroDestino > posicionActual:
         listaPosiciones= actuadorAvance.get_lista_posiciones()
@@ -869,10 +1007,8 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                     if diferenciaTiempo >= (actuadorAvance.get_tiempo_entre_posiciones() * nroSaltos):
                         detener=True
                         expiroTiempo= True
-                    
                 ik.setOutputState(actuadorAvance.get_numero_puerto(), 0)
                 if expiroTiempo:
-                    print("Expiro el tiempo maximo para completar el movimiento")
                     if actuadorAvance.get_estado_alerta() == 'N':
                         actuadorAvance.set_estado_alerta('S')
                         mbd= ManejadorBD()
@@ -908,7 +1044,6 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                     con.close()
                     return nroDestino
             else:
-                print("No puede instanciar el padre")
                 if actuadorAvance.get_padre().get_estado_alerta() == 'N':
                     actuadorAvance.get_padre().set_estado_alerta('S')
                     mbd= ManejadorBD()
@@ -952,13 +1087,11 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                         detener= True
                     tiempoActual= time.time()
                     diferenciaTiempo=int(tiempoActual-tiempoInicial)
-                    
                     if diferenciaTiempo >= (actuadorAvance.get_tiempo_entre_posiciones() * nroSaltos):
                         detener=True
                         expiroTiempo= True
                 ik.setOutputState(actuadorAvance.get_numero_puerto_retroceso(), 0)
                 if expiroTiempo:
-                    print("Expiro el tiempo maximo para completar el movimiento")
                     if actuadorAvance.get_estado_alerta() == 'N':
                         actuadorAvance.set_estado_alerta('S')
                         mbd= ManejadorBD()
@@ -994,7 +1127,6 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
                     con.close()
                     return nroDestino
             else:
-                print("No puede instanciar el padre")
                 if actuadorAvance.get_padre().get_estado_alerta() == 'N':
                     actuadorAvance.get_padre().set_estado_alerta('S')
                     mbd= ManejadorBD()
@@ -1009,9 +1141,11 @@ def cambiarPosicionActuadorAvance(actuadorAvance, nroDestino):
             return 'F'
             
 def cambiarPosicionGrupoActuadores(grupo, nroPosicion):
-    """
-    Método para apagar un grupo de actuadores
-    """
+    """Método para cambiar de posicion un grupo de actuadores de avance.
+    @param grupo: Grupo de actuadores de avance al que se pretende cambiar de posición
+    @param nroDestino: Número de posición al que se pretende cambiar el actuador de avance
+    @rtype: ResultadoAccion
+    @return: Devuelve el ResultadoAccion generado al intentar cambiar de posición al grupo de actuadores de avance."""
     listaAcciones= list()
     listaActuadores= grupo.get_lista_actuadores()
     for actuadorAvance in listaActuadores:
@@ -1073,9 +1207,14 @@ def cambiarPosicionGrupoActuadores(grupo, nroPosicion):
     return resultadoAccion
     
 def getPlaca():
+    """Método utilizado desde los hilos secundarios del sistema para obtener la instancia de la placa generada en el hilo principal."""
     return __placa
 
 def convertirResultadoLectura(resultadoLectura):
+    """Método para convertir un ResultadoLectura a un ResultadoLecturaWS.
+    @param resultadoLectura: ResultadoLectura a convertir
+    @rtype: ResultadoLecturaWS
+    @return: Devuelve el ResultadoLectura convertido a ResultadoLecturaWS"""
     mensaje= resultadoLectura.get_mensaje()
     fecha= resultadoLectura.get_fecha()
     idFactor= resultadoLectura.get_id_factor()
@@ -1084,6 +1223,10 @@ def convertirResultadoLectura(resultadoLectura):
     return resultado
 
 def convertirResultadoAccion(resultadoAccion):
+    """Método para convertir un ResultadoAccion a un ResultadoAccionWS.
+    @param resultadoLectura: ResultadoAccion a convertir
+    @rtype: ResultadoAccionWS
+    @return: Devuelve el ResultadoAccion convertido a ResultadoAccionWS"""
     mensaje= resultadoAccion.get_mensaje()
     fecha= resultadoAccion.get_fecha()
     idGrupoActuadores= resultadoAccion.get_id_grupo_actuadores()
@@ -1092,6 +1235,7 @@ def convertirResultadoAccion(resultadoAccion):
     return resultado
 
 def reestablecerEstadoAlerta(idDispositivo):
+    """Método para reestablecer del estado de alerta al Dispositivo que se corresponde con el identificador pasado como parámetro"""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.cambiarEstadoAlerta(con, idDispositivo(), 'N')
@@ -1099,31 +1243,20 @@ def reestablecerEstadoAlerta(idDispositivo):
     con.close()
     
 def reestablecerActuadorAvance(idDispositivo, numeroPosicion):
+    """Método para reestablecer del estado de alerta al ActuadorAvance que se corresponde con el identificador pasado como parámetro, y asignar su posición luego de reestablecido"""
     mbd= ManejadorBD()
     con= mbd.getConexion()
     mbd.recuperarActuadorAvance(con, idDispositivo, numeroPosicion)
     con.close()
-    
-
-def iniciarHiloWS():
-    t = iniciarWS()
-    t.start()
-    print("WS publicado")
-    
-def iniciarHiloLecturas():    
-    t2= tomarLecturas()
-    t2.start()
-    print('Lecturas automaticas iniciadas')
-    
-def iniciarHiloNiveles():        
-    t3= procesarNiveles()
-    t3.start()
-    print('Procesado niveles iniciado')
 
 class Comunicacion(SimpleWSGISoapApp):
+    """Clase que extiende de SimpleWSGISoapApp utilizada para publicar los servicios web disponibilizados por la placa controladora."""
     
     @soapmethod(Integer,_returns=ResultadoAccionWS)
     def wsEncenderGrupoActuadores(self, idGrupo):
+        """Servicio web publicado para encender el GrupoActuador que se corresponde con el identificador pasado como parámetro.
+        @rtype: ResultadoAccionWS
+        @return: Devuelve el resultado generado al intentar encender el grupo de actuadores."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M':
@@ -1159,13 +1292,15 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,_returns=ResultadoAccionWS)
     def wsApagarGrupoActuadores(self, idGrupo):
+        """Servicio web publicado para apagar el GrupoActuador que se corresponde con el identificador pasado como parámetro.
+        @rtype: ResultadoAccionWS
+        @return: Devuelve el resultado generado al intentar apagar el grupo de actuadores."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M':
             listaGrupoActuadores= placa.get_lista_grupo_actuadores()
             mensaje= None
             grupo=None
-        
             i=0
             while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
                 i= i+1
@@ -1195,13 +1330,15 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer,_returns=ResultadoAccionWS)
     def wsCambiarPosicionGrupoActuadores(self, idGrupo, nroPosicion):
+        """Servicio web publicado para cambiar de posición el GrupoActuador que se corresponde con el identificador pasado como parámetro.
+        @rtype: ResultadoAccionWS
+        @return: Devuelve el resultado generado al intentar cambiar de posición el grupo de actuadores."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M':
             listaGrupoActuadores= placa.get_lista_grupo_actuadores()
             mensaje= None
             grupo=None
-        
             i=0
             while i < len(listaGrupoActuadores) and idGrupo <> listaGrupoActuadores[i].get_id_grupo_actuador():
                 i= i+1
@@ -1231,6 +1368,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,_returns=ResultadoLecturaWS)
     def wsLecturaFactor(self, idFactor):
+        """Servicio web publicado para obtener la lectura del Factor que se corresponde con el identificador pasado como parámetro.
+        @rtype: ResultadoLecturaWS
+        @return: Devuelve el resultado generado al intentar obtener la lectura del factor."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M' or estadoSistema == 'A':
@@ -1266,6 +1406,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,_returns=Mensaje)
     def wsCambiarEstadoSistema(self, estado):
+        """Servicio web publicado para cambiar de estado el sistema, dado el estado pasado como parámetro.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje resultado del cambio de estado del sistema"""
         cambiarEstadoPlaca(estado)
         idMensaje= Mensajes.cambioEstadoSistemaOk
         mbd= ManejadorBD()
@@ -1276,6 +1419,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, String, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearFactor(self, nombre, unidad, valorMin, valorMax, umbral):
+        """Servicio web publicado para crear un Factor.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el Factor."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1296,6 +1442,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, String, _returns=ResultadoCreacionWS)
     def wsCrearGrupoActuadores(self, nombre, deAvance):
+        """Servicio web publicado para crear un GrupoActuador.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el GrupoActuador."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1316,6 +1465,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, String, Integer, String, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearSensor(self, nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
+        """Servicio web publicado para crear un Sensor.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el Sensor."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1336,6 +1488,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,String, Integer, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearActuador(self, nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
+        """Servicio web publicado para crear un Actuador.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el Actuador."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         idActuador= 0
@@ -1357,6 +1512,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, _returns=ResultadoCreacionWS)
     def wsCrearTipoPlaca(self, nombre):
+        """Servicio web publicado para crear un TipoPlaca.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el TipoPlaca."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1377,6 +1535,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, _returns=ResultadoCreacionWS)
     def wsCrearTipoActuador(self, nombre):
+        """Servicio web publicado para crear un TipoActuador.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el TipoActuador."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1397,6 +1558,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,String, Integer, String, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearPlacaAuxiliar(self, nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre):
+        """Servicio web publicado para crear una PlacaAuxiliar.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el PlacaAuxiliar."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1417,6 +1581,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearNivelSeveridad(self, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
+        """Servicio web publicado para crear un NivelSeveridad.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear el NivelSeveridad."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1437,6 +1604,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, String, _returns=ResultadoCreacionWS)
     def wsAgregarFilaPerfilActivacion(self, idPerfilActivacion, idGrupoActuadores, estado):
+        """Servicio web publicado para crear una fila perteneciente a un PerfilActivacion.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear una fila perteneciente a un PerfilActivacion."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1457,6 +1627,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,String, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearActuadorAvance(self, nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+        """Servicio web publicado para crear un ActuadorAvance.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear un ActuadorAvance."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1477,6 +1650,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, String, Integer, _returns=ResultadoCreacionWS)
     def wsAgregarPosicionActuadorAvance(self, idActuadorAvance, numeroPosicion, descripcion, valor):
+        """Servicio web publicado para crear una Posicion asociada a un ActuadorAvance.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear una Posicion asociada a un ActuadorAvance"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1497,6 +1673,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsAgregarSensorPosicionActuadorAvance(self, idSensor, idActuadorAvance, numeroPosicion):
+        """Servicio web publicado para crear un Sensor asociado a una Posicion perteneciente a un ActuadorAvance.
+        @rtype: ResultadoCreacionWS
+        @return: Devuelve el resultado generado al crear un Sensor asociado a una Posicion perteneciente a un ActuadorAvance"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1517,6 +1696,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarDispositivo(self, idDispositivo):
+        """Servicio web publicado para eliminar lógicamente un Dispositivo del sistema.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1536,6 +1718,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarFactor(self, idFactor):
+        """Servicio web publicado para eliminar lógicamente un Factor del sistema.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1555,6 +1740,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarGrupoActuadores(self, idGrupoActuadores):
+        """Servicio web publicado para eliminar lógicamente un GrupoActuador del sistema.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1574,6 +1762,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarNivelSeveridad(self, idNivelSeveridad):
+        """Servicio web publicado para eliminar lógicamente un NivelSeveridad del sistema.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1593,6 +1784,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, _returns=Mensaje)
     def wsEliminarFilaPerfilActivacion(self, idPerfil, idGrupoActuadores):
+        """Servicio web publicado para eliminar lógicamente una fila perteneciente a un PerfilActivacion.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1612,6 +1806,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,  _returns=Mensaje)
     def wsReestablecerEstadoAlertaDispositivo(self, idDispositivo):
+        """Servicio web publicado para reestablecer del estado de alerta al Dispositivo que se corresponde con el identificador pasado como parámetro.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de reestablecer el estado alerta del Dispositivo"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1631,6 +1828,9 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer,  _returns=Mensaje)
     def wsReestablecerActuadorAvance(self, idDispositivo, numeroPosicion):
+        """Servicio web publicado para reestablecer del estado de alerta  y actualizar la posición actual del ActuadorAvance que se corresponde con el identificador pasado como parámetro.
+        @rtype: Mensaje
+        @return: Devuelve el mensaje generado como consecuencia de reestablecer el ActuadorAvance"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1649,13 +1849,16 @@ class Comunicacion(SimpleWSGISoapApp):
         return mensaje
 
 if __name__ == '__main__':
+    """Método invocado automáticamente al ejecutar el módulo Main, que pone en funcionamiento el sistema."""
     __placa=iniciarPlaca()
-    apagarTodo()
     if __placa <> None:
+        apagarTodo()
         iniciarHiloWS()
         estado= __placa.get_estado_sistema()
         if estado == 'M' or estado == 'A':
             iniciarHiloLecturas()
+            iniciarHiloEstadoAlertaSistema()
+            iniciarHiloProcesarEstadoAlertaSistema()
         if estado == 'A':
             iniciarHiloNiveles()
     else:

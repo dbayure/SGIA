@@ -54,6 +54,24 @@ class ManejadorBD(object):
         cursor.close()
         return resultado[0]
     
+    def obtenerEstadoAlertaSistema(self, conexion):
+        """Devuelve el estado de alerta del sistema, como un char(1) (S/N)"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectEstadoAlertaSistema())
+        resultado= cursor.fetchone()
+        cursor.close()
+        return resultado[0]
+    
+    def obtenerCantidadDispositivosAlerta(self, conexion):
+        """Devuelve la cantidad de dispositivos en estado de alerta"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectCantidadDispositivosEnAlerta())
+        resultado= cursor.fetchone()
+        cursor.close()
+        return resultado[0]
+    
     def obtenerNroSeriePlaca(self, conexion):
         """Devuelve el número de serie de la placa, como un String"""
         c= Consultas()
@@ -488,6 +506,13 @@ class ManejadorBD(object):
         c= Consultas()
         cursor= conexion.cursor()
         cursor.execute(c.updateEstadoPlaca(), (estado,))
+        return None
+    
+    def cambiarEstadoAlertaSistema(self, conexion, estado):
+        """Actualiza el estado alerta del sistema."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateEstadoAlertaSistema(), (estado,))
         return None
     
     def insertarPlacaAuxiliar(self, conexion, idDispositivo, nroSerie, idTipoPlaca, idPlacaPadre):
