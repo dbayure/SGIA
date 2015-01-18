@@ -24,6 +24,18 @@ class Consultas(object):
         consulta="select estadoAlerta from parametros"
         return consulta
     
+    def selectEstadoAlertaDispositivo(self):
+        """Devuelve la consulta para obtener el estado de alerta de un dispositivo."""
+        consulta="select estadoAlerta from dispositivos where idDispositivo=?"
+        return consulta
+    
+    def selectDatosPlaca(self):
+        """Devuelve la consulta para obtener los datos de la placa para pasarlos por WS"""
+        consulta="""select nroSeriePlaca, estadoPlaca, hostWS_SMS, puertoWS_SMS, hostWS_Centralizadora, puertoWS_Centralizadora,
+                    periodicidadLecturas, periodicidadNiveles, estadoAlerta
+                    from parametros"""
+        return consulta
+    
     def selectCantidadDispositivosEnAlerta(self):
         """Devuelve la consulta para obtener la cantidad de dispositivos en estado de alerta"""
         consulta= "select count(*) from dispositivos where activoSistema = 'S' and estadoAlerta = 'S'"
@@ -181,6 +193,46 @@ class Consultas(object):
                     limit ?"""
         return consulta
     
+    def selectLecturasSensorPorCantidad(self):
+        """Devuelve la consulta para obtener las últimas n lecturas de un factor, dados un idFactor y la cantidad n de lecturas que se pretende recuperar"""
+        consulta= """select fecha, valor, idLectura from lecturas where idDispositivo=? and informada is null order by fecha desc limit ?"""
+        return consulta
+    
+    def selectAccionesPorCantidad(self):
+        """Devuelve la consulta para obtener las últimas n acciones de un actuador, dados un idDispositivo y la cantidad n de lecturas que se pretende recuperar"""
+        consulta= """select fecha, tipoAccion, idAccion from acciones where idDispositivo=? and informada is null order by fecha desc limit ?"""
+        return consulta
+    
+    def selectLogEventosPorCantidad(self):
+        """Devuelve la consulta para obtener los últimos n logEventos de un actuador, dados un idDispositivo y la cantidad n de lecturas que se pretende recuperar"""
+        consulta= """select idLogEvento, idTipoLog, idDispositivo, idMensaje, fecha from logEventos where informada is null order by fecha desc limit ?"""
+        return consulta
+    
+    def updateAccionLeida(self):
+        """Devuelve la consulta para actualizar como informada una accion"""
+        consulta= """update acciones set informada='S' where idAccion=? and informada is null"""
+        return consulta
+    
+    def updateLogEventoEnviado(self):
+        """Devuelve la consulta para actualizar como informado un log de eventos"""
+        consulta= """update logEventos set informada='S' where idLogEvento=? and informada is null"""
+        return consulta
+    
+    def updateLecturasSensorLeida(self):
+        """Devuelve la consulta para obtener las últimas n lecturas de un factor, dados un idFactor y la cantidad n de lecturas que se pretende recuperar"""
+        consulta= """update lecturas set informada='S' where idLectura=? and informada is null"""
+        return consulta
+    
+    def selectLecturasFactorPorCantidad(self):
+        """Devuelve la consulta para obtener las últimas n lecturas de un factor, dados un idFactor y la cantidad n de lecturas que se pretende recuperar"""
+        consulta= """select fecha, valor, idLecturaFactor from lecturasFactores where idFactor=? and informada is null order by fecha desc limit ?"""
+        return consulta
+    
+    def updateLecturasFactorLeida(self):
+        """Devuelve la consulta para obtener las últimas n lecturas de un factor, dados un idFactor y la cantidad n de lecturas que se pretende recuperar"""
+        consulta= """update lecturasFactores set informada='S' where idLecturaFactor=? and informada is null"""
+        return consulta
+    
     def selectFactores(self):
         """Devuelve la consulta para obtener la lista de factores activos en el sistema."""
         consulta="""select idFactor, nombre, unidad, valorMin, valorMax, umbral, activoSistema
@@ -234,6 +286,11 @@ class Consultas(object):
     def selectUltimoFactor(self):
         """Devuelve la consulta para obtener el id del último factor agregado al sistema."""
         consulta= "select max(idFactor) from factores"
+        return consulta
+    
+    def selectUltimoDestinatario(self):
+        """Devuelve la consulta para obtener el id del último destinatario agregado al sistema."""
+        consulta= "select max(idDestinatario) from destinatarios"
         return consulta
     
     def selectListaDestinatarios(self):
@@ -384,9 +441,36 @@ class Consultas(object):
         consulta= "insert into logEventos (idTipoLog, idDispositivo, idMensaje, fecha) values (?, ?, ?, ?)"
         return consulta
     
+    def insertDestinatario(self):
+        """Devuelve la consulta para insertar un destinatario al sistema.
+        Se deben sustituir los siguientes parámetros: nombre, celular, mail, horaMin, horaMax"""
+        consulta= "insert into destinatarios (nombre, celular, mail, horaMin, horaMax) values (?, ?, ?, ?, ?)"
+        return consulta
+    
+    def insertDestinatarioTipoLog(self):
+        """Devuelve la consulta para insertar una asociacion de un destinatario a un Tipo de Log de Eventos.
+        Se deben sustituir los siguientes parámetros: idTipoLogEvento e idDestinatario"""
+        consulta= "insert into destinatariosTiposLog (idTipoLogEvento, idDestinatario) values (?, ?)"
+        return consulta
+    
     def updateEstadoActuador(self):
         """Devuelve la consulta para actualizar el estado de un actuador, dados el estado y un idDispositivo"""
         consulta = "update actuadores set estado = ? where idDispositivo= ?"
+        return consulta
+    
+    def updateFactorSensor(self):
+        """Devuelve la consulta para actualizar el factor de un sensor, dados el idFactor y un idDispositivo"""
+        consulta = "update sensores set idFactor= ? where idDispositivo= ?"
+        return consulta
+    
+    def updateGrupoActuadorActuador(self):
+        """Devuelve la consulta para actualizar el factor de un sensor, dados el idFactor y un idDispositivo"""
+        consulta = "update actuadores set idGrupoActuadores= ? where idDispositivo= ?"
+        return consulta
+    
+    def updateGrupoActuadorActuadorAvance(self):
+        """Devuelve la consulta para actualizar el factor de un sensor, dados el idFactor y un idDispositivo"""
+        consulta = "update actuadoresAvance set idGrupoActuadores= ? where idDispositivo= ?"
         return consulta
     
     def updateEstadoGrupoActuadores(self):
@@ -442,5 +526,92 @@ class Consultas(object):
     def updateEstadoAlertaDispositivo(self):
         """Devuelve la consulta para actualizar el estado de alerta de un dispositivo, dados el estadoAlerta y su idDispositivo"""
         consulta= "update dispositivos set estadoAlerta = ? where idDispositivo = ?"
+        return consulta
+    
+    def updateDestinatario(self):
+        """Devuelve la consulta para actualizar los parametros de un destinatario"""
+        consulta= "update destinatarios set nombre= ?, celular= ?, mail= ?, horaMin= ?, horaMax= ? where idDestinatario= ?"
+        return consulta
+    
+    def updateDispositivo(self):
+        """Devuelve la consulta para actualizar los parametros de un dispositivo"""
+        consulta= "update dispositivos set nombre= ?, modelo= ?, nroPuerto= ? where idDispositivo= ?"
+        return consulta
+    
+    def updateSensor(self):
+        """Devuelve la consulta para actualizar los parametros de un sensor"""
+        consulta= "update sensores set formulaConversion= ?, idTipoPuerto= ?, idPlacaPadre= ?, idFactor= ? where idDispositivo= ?"
+        return consulta
+    
+    def updateActuadorAvance(self):
+        """Devuelve la consulta para actualizar los parametros de un actuador de avance"""
+        consulta= """update actuadoresAvance set posicion= ?, idTipoPuerto= ?, idTipoActuador= ?, idPlacaPadre= ?, 
+                     nroPuertoRetroceso= ?, tiempoEntrePosiciones= ?, idGrupoActuadores= ?
+                     where idGrupoActuadores= ?"""
+        return consulta
+    
+    def updateActuador(self):
+        """Devuelve la consulta para actualizar los parametros de un actuador"""
+        consulta= "update actuadores set idTipoPuerto=?, idTipoActuador=?, idPlacaPadre=?, idGrupoActuadores=? where idDispositivo= ?"
+        return consulta
+    
+    def updateGrupoActuadores(self):
+        """Devuelve la consulta para actualizar los parametros de un grupo de actuadores"""
+        consulta= "update gruposActuadores set nombre=?, deAvance=? where idGrupoActuadores=?"
+        return consulta
+    
+    def updateTipoActuador(self):
+        """Devuelve la consulta para actualizar el nombre de un tipo de actuador"""
+        consulta= "update tipoActuadores set nombre=? where idTipoActuador= ?"
+        return consulta
+    
+    def updateTipoPlaca(self):
+        """Devuelve la consulta para actualizar el nombre de un tipo de placa"""
+        consulta= "update tipoPlacas set nombre=? where idTipoPlaca= ?"
+        return consulta
+    
+    def updateTipoLogEvento(self):
+        """Devuelve la consulta para actualizar un tipo de log de evento"""
+        consulta= "update tipoLogEventos set enviarMAIL= ?, enviarSMS= ? where idTipoLogEventos= ?"
+        return consulta
+    
+    def updateFactor(self):
+        """Devuelve la consulta para actualizar un factor"""
+        consulta= "update factores set nombre=?, unidad=?, valorMin=?, valorMax=?, umbral=? where idFactor=?"
+        return consulta
+    
+    def updatePlacaAuxiliar(self):
+        """Devuelve la consulta para actualizar una placa auxiliar"""
+        consulta= "update placasAuxiliares set nroSerie=?, idTipoPlaca= ?, idPlacaPadre=? where idDispositivo=?"
+        return consulta
+    
+    def updateNivelSeveridad(self):
+        """Devuelve la consulta para actualizar un nivel de severidad"""
+        consulta= "update nivelesSeveridad set nombre=?, idFactor=?, prioridad=?, rangoMinimo=?, rangoMaximo=? where idNivel=?"
+        return consulta
+    
+    def updatePlaca(self):
+        """Devuelve la consulta para actualizar los parametros de la placa"""
+        consulta= "update parametros set periodicidadLecturas=?, periodicidadNiveles=?"
+        return consulta
+
+    def deleteDestinatarioTipoLogEvento(self):
+        """Devuelve la consulta para eliminar la asociacion de un destinatario a un tipoLogEvento"""
+        consulta= "delete from destinatariosTiposLog where idTipoLogEvento= ? and idDestinatario= ?"
+        return consulta
+    
+    def deletePerfilActivacion(self):
+        """Devuelve la consulta para eliminar un perfil de activacion perteneciente a un nivel de severidad"""
+        consulta= "delete from perfilesActivacion where idPerfilActivacion= ?"
+        return consulta
+    
+    def deleteDestinatariosTiposLog(self):
+        """Devuelve la consulta para eliminar todas las asociaciones de un destinatario con tipos de log de eventos"""
+        consulta= "delete from destinatariosTiposLog where idDestinatario=?"
+        return consulta
+    
+    def deleteDestinatario(self):
+        """Devuelve la consulta para eliminar un destinatario"""
+        consulta= "delete from destinatarios where idDestinatario= ?"
         return consulta
     

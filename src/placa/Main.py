@@ -20,10 +20,13 @@ import threading
 from src.ws.ResultadoLecturaWS import ResultadoLecturaWS
 from src.ws.ResultadoAccionWS import ResultadoAccionWS
 from src.ws.ResultadoCreacionWS import ResultadoCreacionWS
+from src.ws.ResultadoDatosPlacaWS import ResultadoDatosPlacaWS
 import time
+import math
 from src.placa.ActuadorAvance import ActuadorAvance
 from src.logs.LogEvento import LogEvento
 from src.logs.SMS import SMS
+from src.logs.SendLectura import SendLectura
 
 __placa=None
 __ws=None
@@ -156,6 +159,28 @@ def obtenerDispositivoSegunId(listaDispositivos, idDispositivo):
         dispositivo= listaDispositivos[i]
     return dispositivo
 
+
+def obtenerDatosPlaca():
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    datosPlaca=mbd.obtenerDatosPlaca(con)
+    con.close()
+    return datosPlaca
+
+def obtenerEstadoAlertaSistema():
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    estadoSistema=mbd.obtenerEstadoAlertaSistema(con)
+    con.close()
+    return estadoSistema
+
+def obtenerEstadoAlertaDispostivo(idDispositivo):
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    estadoDispositivo=mbd.obtenerEstadoAlertaDispositivo(con, idDispositivo)
+    con.close()
+    return estadoDispositivo
+
 class iniciarWS(threading.Thread):
     """Clase que extiende threading.Thread, utilizada para publicar el WS como un nuevo hilo de ejecución del sistema."""
     def __init__(self):
@@ -186,6 +211,112 @@ class tomarLecturas(threading.Thread):
             for factor in listaFactores:
                 procesarLecturaFactor(factor)
             time.sleep(placa.get_periodicidad_lecturas())
+            
+class enviarLecturas(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada enviar las lecturas obtenidas por los sensores como un nuevo hilo de ejecución del sistema."""
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
+        print('entra a informar')
+        placa= getPlaca()
+        listaFactores= placa.get_lista_factores()
+        numeroLecturas= Propiedades.factorInformeLecturas * Propiedades.factorRecuperacion
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        datosAC= mbd.obtenerHostPuertoWS_Centralizadora(con)
+        con.close()
+        sendLec= SendLectura(datosAC[0], datosAC[1])
+        while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+            for factor in listaFactores:
+                con= mbd.getConexion()
+                listaLecturasFactor= mbd.obtenerListaLecturasFactorCantidad(con, factor.get_id_factor(), numeroLecturas)
+                con.close()
+                ok=sendLec.enviarLecturasFactor(placa.get_nro_serie(), listaLecturasFactor)
+                if (ok):
+                    con= mbd.getConexion()
+                    for l in listaLecturasFactor:
+                        con= mbd.getConexion()
+                        mbd.marcarLecturaFactorInformada(con, l.get_id_lectura())
+                    con.close()
+                listaSensores=factor.get_lista_sensores()
+                for sensor in listaSensores:
+                    con= mbd.getConexion()
+                    listaLecturas= mbd.obtenerLecturasSensorCantidad(con, sensor.get_id_dispositivo(), numeroLecturas)
+                    con.close()
+                    ok=sendLec.enviarLecturas(placa.get_nro_serie(), listaLecturas)
+                    if (ok):
+                        con= mbd.getConexion()
+                        for l in listaLecturas:
+                            con= mbd.getConexion()
+                            mbd.marcarLecturaInformada(con, l.get_id_lectura())
+                        con.close()
+            time.sleep( placa.get_periodicidad_lecturas() * Propiedades.factorInformeLecturas)
+            
+class enviarAcciones(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada enviar las lecturas obtenidas por los sensores como un nuevo hilo de ejecución del sistema."""
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
+        print('entra a informar')
+        placa= getPlaca()
+        listaGruposActuadores= placa.get_lista_grupo_actuadores()
+        numeroAcciones= Propiedades.factorInformeLecturas * Propiedades.factorRecuperacion
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        datosAC= mbd.obtenerHostPuertoWS_Centralizadora(con)
+        con.close()
+        sendLec= SendLectura(datosAC[0], datosAC[1])
+        while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+            for grupo in listaGruposActuadores:
+                
+                listaActuadores=grupo.get_lista_actuadores()
+                for actuador in listaActuadores:
+                    con= mbd.getConexion()
+                    listaAcciones= mbd.obtenerAccionesCantidad(con, actuador.get_id_dispositivo(), numeroAcciones)
+                    con.close()
+                    if (len(listaAcciones) > 0):
+                        ok=sendLec.enviarAcciones(placa.get_nro_serie(), listaAcciones)
+                        if (ok):
+                            con= mbd.getConexion()
+                            for a in listaAcciones:
+                                con= mbd.getConexion()
+                                mbd.marcarAccionInformada(con, a.get_id_accion())
+                            con.close()
+            time.sleep( placa.get_periodicidad_lecturas() * Propiedades.factorInformeLecturas)
+            
+class enviarLogEventos(threading.Thread):
+    """Clase que extiende threading.Thread, utilizada enviar las lecturas obtenidas por los sensores como un nuevo hilo de ejecución del sistema."""
+    def __init__(self):
+        threading.Thread.__init__(self)
+    
+    def run(self):
+        """Método al que debe invocarse para poner al hilo en ejecución"""
+        print('entra a informar log de eventos')
+        placa= getPlaca()
+        numeroLogs= Propiedades.factorInformeLecturas * Propiedades.factorRecuperacion
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        datosAC= mbd.obtenerHostPuertoWS_Centralizadora(con)
+        con.close()
+        sendLec= SendLectura(datosAC[0], datosAC[1])
+        while (placa.get_estado_sistema() == 'A' or placa.get_estado_sistema() == 'M'):
+            
+            con= mbd.getConexion()
+            listaLogs= mbd.obtenerLogEventosCantidad(con, numeroLogs)
+            con.close()
+            if (len(listaLogs)>0):
+                ok=sendLec.enviarLogEventoPendientes(placa.get_nro_serie(), listaLogs)
+                if (ok):
+                    con= mbd.getConexion()
+                    for l in listaLogs:
+                        con= mbd.getConexion()
+                        mbd.marcarLogEventoInformada(con, l.get_id_log_evento())
+                    con.close()
+            time.sleep( placa.get_periodicidad_lecturas() * Propiedades.factorInformeLecturas)
             
 class estadoAlertaSistema(threading.Thread):
     """Clase que extiende threading.Thread, utilizada iniciar el análisis de estado de alerta del sistema como un nuevo hilo de ejecución."""
@@ -322,6 +453,24 @@ def iniciarHiloProcesarEstadoAlertaSistema():
     t5= procesarEstadoAlertaSistema()
     t5.start()
     print('Procesado estado alerta sistema iniciado')
+    
+def iniciarHiloInformeLecturas(): 
+    """Método para iniciar el procesado de envio de lecturas obtenidas, como hilo secundario del sistema"""      
+    t6= enviarLecturas()
+    t6.start()
+    print('Informe de lecturas iniciado')
+    
+def iniciarHiloInformeAcciones(): 
+    """Método para iniciar el procesado de envio de acciones disparadas, como hilo secundario del sistema"""      
+    t7= enviarAcciones()
+    t7.start()
+    print('Informe de lecturas iniciado')
+    
+def iniciarHiloInformeLogEventos(): 
+    """Método para iniciar el procesado de envio de log de eventos disparadas, como hilo secundario del sistema"""      
+    t8= enviarLogEventos()
+    t8.start()
+    print('Informe de log de eventos iniciado')
             
 def analizarCumplimientoNivel( listaValoresLecturas, minimo, maximo):
     """Método para analizar si cumplen las condiciones que determinan el cumplimiento de un nivel de severidad.
@@ -389,6 +538,9 @@ def obtenerIkPadre (dispositivo):
         return __placa.get_ik()
     else:
         return padre.get_ik()
+    
+    
+    
 
 def lecturaSensor(sensor):
     """Método que permite obtener una lectura de un sensor conectado a un puerto analógico ó digital,
@@ -414,6 +566,7 @@ def lecturaSensor(sensor):
             else:
                 temp= eval(sensor.get_formula_conversion())
         except:
+            
             temp= -999
     elif tipoPuerto.get_nombre() == "e-digital":
         try: 
@@ -718,6 +871,220 @@ def crearFactor(nombre, unidad, valorMin, valorMax, umbral):
     con.close()
     return idFactor
 
+def crearDestinatario(nombre, celular, mail, horaMin, horaMax):
+    """Método para crear y persisitir un Destinatario en el sistema.
+    @rtype: int
+    @return: Devuelve el identificador del Destinatario creado."""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    idDestinatario=mbd.insertarDestinatario(con, nombre, celular, mail, horaMin, horaMax)
+    con.commit()
+    con.close()
+    return idDestinatario
+
+def actualizarDestinatario(nombre, celular, mail, horaMin, horaMax, idDestinatario):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: String
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarDestinatario(con, idDestinatario, nombre, celular, mail, horaMin, horaMax)
+    con.close()
+    return None
+
+def actualizarSensor(idDispositivo, nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: int
+    @rtype: String
+    @rtype: int
+    @rtype: String
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarDispositivo(con, idDispositivo, nombre, modelo, nroPuerto)
+    mbd.actualizarSensor(con, idDispositivo, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor)
+    con.close()
+    return None
+
+def actualizarPlacaAuxiliar(idDispositivo, nombre, modelo, nroSerie, idTipoPlaca, idPlacaPadre):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: int
+    @rtype: String
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarDispositivo(con, idDispositivo, nombre, modelo, None)
+    mbd.actualizarPlacaAuxiliar(con, idDispositivo, nroSerie, idTipoPlaca, idPlacaPadre)
+    con.close()
+    return None
+
+def actualizarPlaca(periodicidadLecturas, periodicidadNiveles):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarPlaca(con, periodicidadLecturas, periodicidadNiveles)
+    con.close()
+    return None
+
+def actualizarFactor(idFactor, nombre, unidad, valorMin, valorMax, umbral):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarFactor(con, idFactor, nombre, unidad, valorMin, valorMax, umbral)
+    con.close()
+    return None
+
+def actualizarActuador(idDispositivo, nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: int
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarDispositivo(con, idDispositivo, nombre, modelo, nroPuerto)
+    mbd.actualizarActuador(con, idDispositivo, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores)
+    con.close()
+    return None
+
+def actualizarActuadorAvance(idDispositivo, nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: int
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @rtype: Char(1)
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarDispositivo(con, idDispositivo, nombre, modelo, nroPuerto)
+    mbd.actualizarActuadorAvance(con, idDispositivo, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores)
+    con.close()
+    return None
+
+def actualizarGrupoActuadores(nombre, deAvance, idGrupoActuadores):
+    """Método para actualizar los datos de un destinatario.
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarGrupoActuadores(con, idGrupoActuadores, nombre, deAvance)
+    con.close()
+    return None
+
+def actualizarTipoActuador(nombre, idTipoActuador):
+    """Método para actualizar los datos de un tipo de actuador.
+    @rtype: String
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarTipoActuador(con, idTipoActuador, nombre)
+    con.close()
+    return None
+
+def actualizarTipoPlaca(nombre, idTipoPlaca):
+    """Método para actualizar los datos de un tipo de placa auxiliar.
+    @rtype: String
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarTipoPlaca(con, idTipoPlaca, nombre)
+    con.close()
+    return None
+
+def actualizarTipoLogEvento(enviarMail, enviarSMS, idTipoLogEvento):
+    """Método para actualizar los datos de un tipo de log de evento.
+    @rtype: String
+    @rtype: String
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarTipoLogEvento(con, idTipoLogEvento, enviarMail, enviarSMS)
+    con.close()
+    return None
+
+def eliminarPerfilActivacion(idNivelSeveridad):
+    """Método para eliminar el perfil de activación perteneciente a un nivel de severidad.
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.eliminarPerfilActivacion(con, idNivelSeveridad)
+    con.close()
+    return None
+
+def asociarDestinatarioTipoLogEvento(idTipoLogEvento, idDestinatario):
+    """Método para asociar un destinatario existente a un tipo de log de eventos.
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.insertarDestinatarioTipoLog(con, idTipoLogEvento, idDestinatario)
+    con.close()
+    return None
+
+def desasociarDestinatarioTipoLogEvento(idTipoLogEvento, idDestinatario):
+    """Método para desasociar un destinatario existente a un tipo de log de eventos.
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.eliminarDestinatarioTipoLog(con, idTipoLogEvento, idDestinatario)
+    con.close()
+    return None
+
+def eliminarDestinatario(idDestinatario):
+    """Método para desasociar un destinatario existente a un tipo de log de eventos.
+    @rtype: int
+    @rtype: int
+    @return: None"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.eliminarDestinatariosTipoLogs(con, idDestinatario)
+    mbd.eliminarDestinatario(con, idDestinatario)
+    con.close()
+    return None
+
 def crearGrupoActuadores(nombre, deAvance):
     """Método para crear y persisitir un GrupoActuador en el sistema.
     @rtype: int
@@ -739,6 +1106,49 @@ def crearNivelSeveridad (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
     con.commit()
     con.close()
     return idNivel
+
+def actualizarNivelSeveridad (nombre, idFactor, prioridad, rangoMinimo, rangoMaximo, idNivelSeveridad):
+    """Método para actualizar un NivelSeveridad en el sistema.
+    @rtype: String
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @rtype: int
+    @return: Devuelve el identificador del NivelSeveridad creado."""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.actualizarNivelSeveridad(con, idNivelSeveridad, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo)
+    con.commit()
+    con.close()
+    return None
+
+def asociarFactorSensor (idFactor, idDispositivo):
+    """Método para asociar un sensor a un factor"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.asignarFactorSensor(con, idFactor, idDispositivo)
+    con.commit()
+    con.close()
+    return None
+
+def asociarGrupoActuadoresActuador (idGrupoActuadores, idDispositivo):
+    """Método para asociar un sensor a un factor"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.asignarGrupoActuadoresActuador(con, idGrupoActuadores, idDispositivo)
+    con.commit()
+    con.close()
+    return None
+
+def asociarGrupoActuadoresActuadorAvance (idGrupoActuadores, idDispositivo):
+    """Método para asociar un sensor a un factor"""
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    mbd.asignarGrupoActuadoresActuadorAvance(con, idGrupoActuadores, idDispositivo)
+    con.commit()
+    con.close()
+    return None
 
 def agregarFilaPerfilActivacion (idPerfilActivacion, idGrupoActuadores, estado):
     """Método para crear y persisitir una nueva fila perteneciente a un PerfilActivacion en el sistema."""
@@ -953,6 +1363,16 @@ def generarLogEvento(idTipoLog, idMensaje, dispositivo):
     else:
         idLogEvento=mbd.insertarLogEvento(con, idTipoLog, 0, idMensaje, fecha)
     logEvento= LogEvento(idLogEvento, tipoLogEvento, dispositivo, mensaje, fecha)
+    
+    mbd= ManejadorBD()
+    con= mbd.getConexion()
+    datosAC= mbd.obtenerHostPuertoWS_Centralizadora(con)
+    
+    sendLec= SendLectura(datosAC[0], datosAC[1])
+    ok= sendLec.enviarLogEvento(__placa.get_nro_serie(), logEvento)
+    if (ok):
+        mbd.marcarLogEventoInformada(con, idLogEvento)
+        
     if (tipoLogEvento.get_enviar_sms() == 'S'):
         hostPuerto= mbd.obtenerHostPuertoWS_SMS(con)
         sms= SMS(hostPuerto[0], hostPuerto[1])
@@ -1238,7 +1658,7 @@ def reestablecerEstadoAlerta(idDispositivo):
     """Método para reestablecer del estado de alerta al Dispositivo que se corresponde con el identificador pasado como parámetro"""
     mbd= ManejadorBD()
     con= mbd.getConexion()
-    mbd.cambiarEstadoAlerta(con, idDispositivo(), 'N')
+    mbd.cambiarEstadoAlerta(con, idDispositivo, 'N')
     con.commit()
     con.close()
     
@@ -1250,13 +1670,9 @@ def reestablecerActuadorAvance(idDispositivo, numeroPosicion):
     con.close()
 
 class Comunicacion(SimpleWSGISoapApp):
-    """Clase que extiende de SimpleWSGISoapApp utilizada para publicar los servicios web disponibilizados por la placa controladora."""
     
     @soapmethod(Integer,_returns=ResultadoAccionWS)
     def wsEncenderGrupoActuadores(self, idGrupo):
-        """Servicio web publicado para encender el GrupoActuador que se corresponde con el identificador pasado como parámetro.
-        @rtype: ResultadoAccionWS
-        @return: Devuelve el resultado generado al intentar encender el grupo de actuadores."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M':
@@ -1292,9 +1708,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,_returns=ResultadoAccionWS)
     def wsApagarGrupoActuadores(self, idGrupo):
-        """Servicio web publicado para apagar el GrupoActuador que se corresponde con el identificador pasado como parámetro.
-        @rtype: ResultadoAccionWS
-        @return: Devuelve el resultado generado al intentar apagar el grupo de actuadores."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M':
@@ -1330,9 +1743,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer,_returns=ResultadoAccionWS)
     def wsCambiarPosicionGrupoActuadores(self, idGrupo, nroPosicion):
-        """Servicio web publicado para cambiar de posición el GrupoActuador que se corresponde con el identificador pasado como parámetro.
-        @rtype: ResultadoAccionWS
-        @return: Devuelve el resultado generado al intentar cambiar de posición el grupo de actuadores."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M':
@@ -1368,9 +1778,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,_returns=ResultadoLecturaWS)
     def wsLecturaFactor(self, idFactor):
-        """Servicio web publicado para obtener la lectura del Factor que se corresponde con el identificador pasado como parámetro.
-        @rtype: ResultadoLecturaWS
-        @return: Devuelve el resultado generado al intentar obtener la lectura del factor."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'M' or estadoSistema == 'A':
@@ -1406,9 +1813,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,_returns=Mensaje)
     def wsCambiarEstadoSistema(self, estado):
-        """Servicio web publicado para cambiar de estado el sistema, dado el estado pasado como parámetro.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje resultado del cambio de estado del sistema"""
         cambiarEstadoPlaca(estado)
         idMensaje= Mensajes.cambioEstadoSistemaOk
         mbd= ManejadorBD()
@@ -1417,15 +1821,72 @@ class Comunicacion(SimpleWSGISoapApp):
         con.close()
         return mensaje
     
+    @soapmethod(Integer, Integer,_returns=Mensaje)
+    def wsAsociarFactorSensor(self, idFactor, idDispositivo):
+        asociarFactorSensor(idFactor, idDispositivo)
+        idMensaje= Mensajes.asociarSensorFactorOk
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mensaje=mbd.obtenerMensaje(con, idMensaje)
+        con.close()
+        return mensaje
+    
+    @soapmethod(Integer, Integer,_returns=Mensaje)
+    def wsAsociarDestinatarioTipoLogEvento(self, idTipoLogEvento, idDestinatario):
+        asociarDestinatarioTipoLogEvento(idTipoLogEvento, idDestinatario)
+        idMensaje= Mensajes.destinatarioAsociadoTipoLogOk
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mensaje=mbd.obtenerMensaje(con, idMensaje)
+        con.close()
+        return mensaje
+    
+    @soapmethod(Integer, Integer,_returns=Mensaje)
+    def wsDesasociarDestinatarioTipoLogEvento(self, idTipoLogEvento, idDestinatario):
+        desasociarDestinatarioTipoLogEvento(idTipoLogEvento, idDestinatario)
+        idMensaje= Mensajes.destinatarioAsociadoTipoLogOk
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mensaje=mbd.obtenerMensaje(con, idMensaje)
+        con.close()
+        return mensaje
+    
+    @soapmethod(Integer, _returns=Mensaje)
+    def wsEliminarDestinatario(self, idDestinatario):
+        eliminarDestinatario(idDestinatario)
+        idMensaje= Mensajes.DestinatarioEliminadoOk
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mensaje=mbd.obtenerMensaje(con, idMensaje)
+        con.close()
+        return mensaje
+    
+    @soapmethod(Integer, Integer,_returns=Mensaje)
+    def wsAsociarActuadorGrupo(self, idGrupoActuadores, idDispositivo):
+        asociarGrupoActuadoresActuador(idGrupoActuadores, idDispositivo)
+        idMensaje= Mensajes.asociarSensorFactorOk
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mensaje=mbd.obtenerMensaje(con, idMensaje)
+        con.close()
+        return mensaje
+    
+    @soapmethod(Integer, Integer,_returns=Mensaje)
+    def wsAsociarActuadorAvanceGrupo(self, idGrupoActuadores, idDispositivo):
+        asociarGrupoActuadoresActuadorAvance(idGrupoActuadores, idDispositivo)
+        idMensaje= Mensajes.asociarSensorFactorOk
+        mbd= ManejadorBD()
+        con= mbd.getConexion()
+        mensaje=mbd.obtenerMensaje(con, idMensaje)
+        con.close()
+        return mensaje
+    
     @soapmethod(String, String, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearFactor(self, nombre, unidad, valorMin, valorMax, umbral):
-        """Servicio web publicado para crear un Factor.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el Factor."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idFactor= crearFactor(nombre, unidad, valorMin, valorMax, umbral)
+            idFactor= crearFactor(unicode(nombre, 'utf8'), unicode(unidad, 'utf8'), valorMin, valorMax, umbral)
             idMensaje= Mensajes.factorCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1440,15 +1901,261 @@ class Comunicacion(SimpleWSGISoapApp):
         resultado= ResultadoCreacionWS(mensaje, idFactor)
         return resultado
     
-    @soapmethod(String, String, _returns=ResultadoCreacionWS)
-    def wsCrearGrupoActuadores(self, nombre, deAvance):
-        """Servicio web publicado para crear un GrupoActuador.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el GrupoActuador."""
+    
+    @soapmethod(String, String, String, Integer, Integer, _returns=ResultadoCreacionWS)
+    def wsCrearDestinatario(self, nombre, celular, mail, horaMin, horaMax):
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idGrupo= crearGrupoActuadores(nombre, deAvance)
+            idDestinatario= crearDestinatario(unicode(nombre, 'utf8'), unicode(celular, 'utf8'), unicode(mail, 'utf8'), horaMin, horaMax)
+            idMensaje= Mensajes.destinatarioCreadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        resultado= ResultadoCreacionWS(mensaje, idDestinatario)
+        return resultado
+    
+    @soapmethod(String, String, String, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarDestinatario(self, nombre, celular, mail, horaMin, horaMax, idDestinatario):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarDestinatario(unicode(nombre, 'utf8'), unicode(celular, 'utf8'), unicode(mail, 'utf8'), horaMin, horaMax, idDestinatario)
+            idMensaje= Mensajes.destinatarioActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, Integer, String, Integer, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarSensor(self, nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor, idDispositivo):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarSensor(idDispositivo, unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, unicode(formulaConversion, 'utf8'), idTipoPuerto, idPlacaPadre, idFactor)
+            idMensaje= Mensajes.sensorActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, String, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarPlacaAuxiliar(self, nombre, modelo, nroSerie, idTipoPlaca, idPlacaPadre, idDispositivo):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarPlacaAuxiliar(idDispositivo, unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), unicode(nroSerie, 'utf8'), idTipoPlaca, idPlacaPadre)
+            idMensaje= Mensajes.PlacaAuxiliarActualizadaOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(Integer, Integer, _returns=Mensaje)
+    def wsActualizarPlaca(self, periodicidadLecturas, periodicidadNiveles):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarPlaca(periodicidadLecturas, periodicidadNiveles)
+            idMensaje= Mensajes.PlacaControladoraActualizadaOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, Integer, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarFactor(self, nombre, unidad, valorMin, valorMax, umbral, idFactor):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarFactor(idFactor, unicode(nombre, 'utf8'), unicode(unidad, 'utf8'), valorMin, valorMax, umbral)
+            idMensaje= Mensajes.FactorActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, Integer, Integer, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarNivelSeveridad(self, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo, idNivelSeveridad):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarNivelSeveridad(unicode(nombre, 'utf8'), idFactor, prioridad, rangoMinimo, rangoMaximo, idNivelSeveridad)
+            idMensaje= Mensajes.NivelSeveridadActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, Integer, Integer, Integer, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarActuador(self, nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores, idDispositivo):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarActuador(idDispositivo, unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores)
+            idMensaje= Mensajes.ActuadorActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, _returns=Mensaje)
+    def wsActualizarActuadorAvance(self, nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores, idDispositivo):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarActuadorAvance(idDispositivo, unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores)
+            idMensaje= Mensajes.ActuadorAvanceActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, Integer, _returns=Mensaje)
+    def wsActualizarGrupoActuadores(self, nombre, deAvance, idGrupoActuadores):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarGrupoActuadores(unicode(nombre, 'utf8'), unicode(deAvance, 'utf8'), idGrupoActuadores) 
+            idMensaje= Mensajes.GrupoActuadoresActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, Integer, _returns=Mensaje)
+    def wsActualizarTipoActuador(self, nombre, idTipoActuador):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarTipoActuador(unicode(nombre, 'utf8'), idTipoActuador) 
+            idMensaje= Mensajes.TipoActuadorActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, Integer, _returns=Mensaje)
+    def wsActualizarTipoPlaca(self, nombre, idTipoPlaca):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarTipoPlaca(unicode(nombre, 'utf8'), idTipoPlaca) 
+            idMensaje= Mensajes.TipoPlacaActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, Integer, _returns=Mensaje)
+    def wsActualizarTipoLogEvento(self, enviarMail, enviarSMS, idTipoLogEvento):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            actualizarTipoLogEvento(enviarMail, enviarSMS, idTipoLogEvento)
+            idMensaje= Mensajes.TipoLogEventoActualizadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(String, String, _returns=ResultadoCreacionWS)
+    def wsCrearGrupoActuadores(self, nombre, deAvance):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            idGrupo= crearGrupoActuadores(unicode(nombre, 'utf8'), deAvance)
             idMensaje= Mensajes.grupoActuadoresCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1463,15 +2170,13 @@ class Comunicacion(SimpleWSGISoapApp):
         resultado= ResultadoCreacionWS(mensaje, idGrupo)
         return resultado
     
+    
     @soapmethod(String, String, Integer, String, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearSensor(self, nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
-        """Servicio web publicado para crear un Sensor.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el Sensor."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idSensor= crearSensor(nombre, modelo, nroPuerto, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor)
+            idSensor= crearSensor(unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, unicode(formulaConversion, 'utf8'), idTipoPuerto, idPlacaPadre, idFactor)
             idMensaje= Mensajes.sensorCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1488,14 +2193,11 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,String, Integer, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearActuador(self, nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
-        """Servicio web publicado para crear un Actuador.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el Actuador."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         idActuador= 0
         if estadoSistema == 'C':
-            idActuador= crearActuador(nombre, modelo, nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores)
+            idActuador= crearActuador(unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores)
             idMensaje= Mensajes.actuadorCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1512,13 +2214,10 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, _returns=ResultadoCreacionWS)
     def wsCrearTipoPlaca(self, nombre):
-        """Servicio web publicado para crear un TipoPlaca.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el TipoPlaca."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idTipoPlaca= crearTipoPlaca(nombre)
+            idTipoPlaca= crearTipoPlaca(unicode(nombre, 'utf8'))
             idMensaje= Mensajes.tipoPlacaCreadaOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1535,13 +2234,10 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, _returns=ResultadoCreacionWS)
     def wsCrearTipoActuador(self, nombre):
-        """Servicio web publicado para crear un TipoActuador.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el TipoActuador."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idTipoActuador= crearTipoActuador(nombre)
+            idTipoActuador= crearTipoActuador(unicode(nombre, 'utf8'))
             idMensaje= Mensajes.tipoActuadorCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1558,13 +2254,10 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,String, Integer, String, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearPlacaAuxiliar(self, nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre):
-        """Servicio web publicado para crear una PlacaAuxiliar.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el PlacaAuxiliar."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idPlacaAuxiliar= crearPlacaAuxiliar(nombre, modelo, nroPuerto, nroSerie, idTipoPlaca, idPlacaPadre)
+            idPlacaAuxiliar= crearPlacaAuxiliar(unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, unicode(nroSerie, 'utf8'), idTipoPlaca, idPlacaPadre)
             idMensaje= Mensajes.placaAuxiliarCreadaOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1581,13 +2274,10 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearNivelSeveridad(self, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
-        """Servicio web publicado para crear un NivelSeveridad.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear el NivelSeveridad."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idNivel= crearNivelSeveridad(nombre, idFactor, prioridad, rangoMinimo, rangoMaximo)
+            idNivel= crearNivelSeveridad(unicode(nombre, 'utf8'), idFactor, prioridad, rangoMinimo, rangoMaximo)
             idMensaje= Mensajes.nivelSeveridadCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1604,9 +2294,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, String, _returns=ResultadoCreacionWS)
     def wsAgregarFilaPerfilActivacion(self, idPerfilActivacion, idGrupoActuadores, estado):
-        """Servicio web publicado para crear una fila perteneciente a un PerfilActivacion.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear una fila perteneciente a un PerfilActivacion."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1627,13 +2314,10 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(String,String, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsCrearActuadorAvance(self, nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
-        """Servicio web publicado para crear un ActuadorAvance.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear un ActuadorAvance."""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
-            idActuadorAvance= crearActuadorAvance(nombre, modelo, nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores)
+            idActuadorAvance= crearActuadorAvance(unicode(nombre, 'utf8'), unicode(modelo, 'utf8'), nroPuerto, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tipoPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores)
             idMensaje= Mensajes.actuadorAvanceCreadoOk
             mbd= ManejadorBD()
             con= mbd.getConexion()
@@ -1650,9 +2334,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, String, Integer, _returns=ResultadoCreacionWS)
     def wsAgregarPosicionActuadorAvance(self, idActuadorAvance, numeroPosicion, descripcion, valor):
-        """Servicio web publicado para crear una Posicion asociada a un ActuadorAvance.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear una Posicion asociada a un ActuadorAvance"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1673,9 +2354,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, Integer, _returns=ResultadoCreacionWS)
     def wsAgregarSensorPosicionActuadorAvance(self, idSensor, idActuadorAvance, numeroPosicion):
-        """Servicio web publicado para crear un Sensor asociado a una Posicion perteneciente a un ActuadorAvance.
-        @rtype: ResultadoCreacionWS
-        @return: Devuelve el resultado generado al crear un Sensor asociado a una Posicion perteneciente a un ActuadorAvance"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1696,9 +2374,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarDispositivo(self, idDispositivo):
-        """Servicio web publicado para eliminar lógicamente un Dispositivo del sistema.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1717,10 +2392,42 @@ class Comunicacion(SimpleWSGISoapApp):
         return mensaje
     
     @soapmethod(Integer, _returns=Mensaje)
+    def wsEliminarPerfilActivacion(self, idNivelSeveridad):
+        placa= getPlaca()
+        estadoSistema= placa.get_estado_sistema()
+        if estadoSistema == 'C':
+            eliminarPerfilActivacion(idNivelSeveridad)
+            idMensaje= Mensajes.PerfilActivacionEliminadoOk
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        else:
+            idMensaje= Mensajes.estadoActualNoEsConfiguracion
+            mbd= ManejadorBD()
+            con= mbd.getConexion()
+            mensaje=mbd.obtenerMensaje(con, idMensaje)
+            con.close()
+        return mensaje
+    
+    @soapmethod(Integer, _returns=ResultadoDatosPlacaWS)
+    def wsObtenerDatosPlaca(self, temp):
+        datosPlaca=obtenerDatosPlaca()
+        resultado= ResultadoDatosPlacaWS(datosPlaca.get_nro_serie_placa(), datosPlaca.get_estado_placa(), datosPlaca.get_host_ws_sms(), datosPlaca.get_puerto_ws_sms(), datosPlaca.get_host_ws_centralizadora(), datosPlaca.get_puerto_ws_centralizadora(), datosPlaca.get_periodicidad_lecturas(), datosPlaca.get_periodicidad_niveles(), datosPlaca.get_estado_alerta())
+        return resultado
+    
+    @soapmethod(String, _returns=String)
+    def wsObtenerEstadoAlertaPlaca(self, nroSerie):
+        estadoAlerta=obtenerEstadoAlertaSistema()
+        return estadoAlerta
+    
+    @soapmethod(Integer, _returns=String)
+    def wsObtenerEstadoAlertaDispositivo(self, idDispositivo):
+        estadoAlerta=obtenerEstadoAlertaDispostivo(idDispositivo)
+        return estadoAlerta
+    
+    @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarFactor(self, idFactor):
-        """Servicio web publicado para eliminar lógicamente un Factor del sistema.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1740,9 +2447,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarGrupoActuadores(self, idGrupoActuadores):
-        """Servicio web publicado para eliminar lógicamente un GrupoActuador del sistema.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1762,9 +2466,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, _returns=Mensaje)
     def wsEliminarNivelSeveridad(self, idNivelSeveridad):
-        """Servicio web publicado para eliminar lógicamente un NivelSeveridad del sistema.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1784,9 +2485,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer, _returns=Mensaje)
     def wsEliminarFilaPerfilActivacion(self, idPerfil, idGrupoActuadores):
-        """Servicio web publicado para eliminar lógicamente una fila perteneciente a un PerfilActivacion.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de la eliminación"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1806,9 +2504,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer,  _returns=Mensaje)
     def wsReestablecerEstadoAlertaDispositivo(self, idDispositivo):
-        """Servicio web publicado para reestablecer del estado de alerta al Dispositivo que se corresponde con el identificador pasado como parámetro.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de reestablecer el estado alerta del Dispositivo"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1828,9 +2523,6 @@ class Comunicacion(SimpleWSGISoapApp):
     
     @soapmethod(Integer, Integer,  _returns=Mensaje)
     def wsReestablecerActuadorAvance(self, idDispositivo, numeroPosicion):
-        """Servicio web publicado para reestablecer del estado de alerta  y actualizar la posición actual del ActuadorAvance que se corresponde con el identificador pasado como parámetro.
-        @rtype: Mensaje
-        @return: Devuelve el mensaje generado como consecuencia de reestablecer el ActuadorAvance"""
         placa= getPlaca()
         estadoSistema= placa.get_estado_sistema()
         if estadoSistema == 'C':
@@ -1859,6 +2551,9 @@ if __name__ == '__main__':
             iniciarHiloLecturas()
             iniciarHiloEstadoAlertaSistema()
             iniciarHiloProcesarEstadoAlertaSistema()
+            iniciarHiloInformeLecturas()
+            iniciarHiloInformeAcciones()
+            iniciarHiloInformeLogEventos()
         if estado == 'A':
             iniciarHiloNiveles()
     else:

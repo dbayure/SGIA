@@ -18,6 +18,10 @@ from src.placa.ActuadorAvance import ActuadorAvance
 from src.placa.Posicion import Posicion
 from src.logs.Destinatario import Destinatario
 from src.logs.TipoLogEventos import TipoLogEventos
+from src.recursos.DatosPlaca import DatosPlaca
+from src.ws.LecturaWS import LecturaWS
+from src.ws.AccionWS import AccionWS
+from src.ws.LogEventoWS import LogEventoWS
 
 
 class ManejadorBD(object):
@@ -54,11 +58,39 @@ class ManejadorBD(object):
         cursor.close()
         return resultado[0]
     
+    def obtenerDatosPlaca(self, conexion):
+        """Devuelve todos los parámetros de la placa controladora"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectDatosPlaca())
+        resultado= cursor.fetchone()
+        cursor.close()
+        nroSeriePlaca= resultado[0]
+        estadoPlaca= resultado[1]
+        hostWS_SMS= resultado[2]
+        puertoWS_SMS= resultado[3]
+        hostWS_Centralizadora= resultado[4]
+        puertoWS_Centralizadora= resultado[5]
+        periodicidadLecturas= resultado[6]
+        periodicidadNiveles= resultado[7]
+        estadoAlerta= resultado[8]
+        datosPlaca= DatosPlaca(nroSeriePlaca, estadoPlaca, hostWS_SMS, puertoWS_SMS, hostWS_Centralizadora, puertoWS_Centralizadora, periodicidadLecturas, periodicidadNiveles, estadoAlerta)
+        return datosPlaca
+    
     def obtenerEstadoAlertaSistema(self, conexion):
         """Devuelve el estado de alerta del sistema, como un char(1) (S/N)"""
         c= Consultas()
         cursor= conexion.cursor()
         cursor.execute(c.selectEstadoAlertaSistema())
+        resultado= cursor.fetchone()
+        cursor.close()
+        return resultado[0]
+    
+    def obtenerEstadoAlertaDispositivo(self, conexion, idDispositivo):
+        """Devuelve el estado de alerta del dispositivo pasado como parametro, como un char(1) (S/N)"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectEstadoAlertaDispositivo(), (idDispositivo, ))
         resultado= cursor.fetchone()
         cursor.close()
         return resultado[0]
@@ -553,6 +585,72 @@ class ManejadorBD(object):
         cursor.close()   
         return listaValoresLecturas
     
+    def obtenerLecturasSensorCantidad(self, conexion, idDispositivo, numeroLecturas):
+        """Obtiene las últimas n lecturas indicadas en el parámetro numeroLecturas para el factor pasado como parámetro.
+        Recibe como parámetros la conexión a la base, el id del factor y el número de lecturas a obtener, devuelve una lista de resultados de lecturas."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectLecturasSensorPorCantidad(), (idDispositivo, numeroLecturas))
+        listaLecturas= list()
+        for lectura in cursor:
+            fecha=str(lectura[0])
+            valor=lectura[1]
+            idLectura=lectura[2]
+            lecturaTemp= LecturaWS(idLectura, fecha, valor, idDispositivo)
+            listaLecturas.append(lecturaTemp)
+        cursor.close() 
+        return listaLecturas
+    
+    def obtenerListaLecturasFactorCantidad(self, conexion, idFactor, numeroLecturas):
+        """Obtiene las últimas n lecturas indicadas en el parámetro numeroLecturas para el factor pasado como parámetro.
+        Recibe como parámetros la conexión a la base, el id del factor y el número de lecturas a obtener, devuelve una lista de resultados de lecturas."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectLecturasFactorPorCantidad(), (idFactor, numeroLecturas))
+        listaLecturas= list()
+        for lectura in cursor:
+            fecha=str(lectura[0])
+            valor=lectura[1]
+            idLectura=lectura[2]
+            lecturaTemp= LecturaWS(idLectura, fecha, valor, idFactor)
+            listaLecturas.append(lecturaTemp)
+        cursor.close() 
+        return listaLecturas
+    
+    def obtenerAccionesCantidad(self, conexion, idDispositivo, numeroAcciones):
+        """Obtiene las últimas n acciones indicadas en el parámetro numeroAcciones para el actuador pasado como parámetro.
+        Recibe como parámetros la conexión a la base, el id del actuador y el número de acciones a obtener, devuelve una lista de resultados de acciones."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectAccionesPorCantidad(), (idDispositivo, numeroAcciones))
+        listaAcciones= list()
+        for accion in cursor:
+            fecha=str(accion[0])
+            tipoAccion=accion[1]
+            idAccion=accion[2]
+            accionTemp= AccionWS(idAccion, fecha, tipoAccion, idDispositivo)
+            listaAcciones.append(accionTemp)
+        cursor.close() 
+        return listaAcciones
+    
+    def obtenerLogEventosCantidad(self, conexion, numeroLogs):
+        """Obtiene los últimos n log de eventos indicadas en el parámetro numeroLogs.
+        Recibe como parámetros la conexión a la base y el número de logs a obtener, devuelve una lista de logs de eventos."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectLogEventosPorCantidad(), (numeroLogs, ))
+        listaLogs= list()
+        for log in cursor:
+            idLogEvento=log[0]
+            idTipoLog=log[1]
+            idDispositivo=log[2]
+            idMensaje=log[3]
+            fecha=str(log[4])
+            logTemp= LogEventoWS(idLogEvento, fecha, idTipoLog, idDispositivo, idMensaje)
+            listaLogs.append(logTemp)
+        cursor.close() 
+        return listaLogs
+    
     def insertarAccionActuador(self, conexion, idActuador, accion):
         """Inserta en la base de datos una acción disparada sobre un actuador. Recibe como parámetros la conexión a la base y el idActuador."""
         c= Consultas()
@@ -560,6 +658,43 @@ class ManejadorBD(object):
         cursor.execute(c.insertAccionActuador(), (idActuador, accion))
         cursor.close()        
         return None
+    
+    def marcarLecturaInformada(self, conexion, idLectura):
+        """Actualiza una lectura como informada a la aplicacion centralizadora."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateLecturasSensorLeida(), (idLectura, ))
+        cursor.close()
+        conexion.commit()        
+        return None
+    
+    def marcarLecturaFactorInformada(self, conexion, idLecturaFactor):
+        """Actualiza una lectura como informada a la aplicacion centralizadora."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateLecturasFactorLeida(), (idLecturaFactor, ))
+        cursor.close()
+        conexion.commit()        
+        return None
+    
+    def marcarAccionInformada(self, conexion, idAccion):
+        """Actualiza una lectura como informada a la aplicacion centralizadora."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateAccionLeida(), (idAccion, ))
+        cursor.close()
+        conexion.commit()        
+        return None
+    
+    def marcarLogEventoInformada(self, conexion, idLogEvento):
+        """Actualiza una lectura como informada a la aplicacion centralizadora."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateLogEventoEnviado(), (idLogEvento, ))
+        cursor.close()
+        conexion.commit()        
+        return None
+
 
     def insertarFactor(self, conexion, nombre, unidad, valorMin, valorMax, umbral):
         """Inserta en la base de datos un factor. Recibe como parámetros la conexión a la base y los atributos del factor a insertar. Devuelve el id del factor creado"""
@@ -578,7 +713,7 @@ class ManejadorBD(object):
         """Inserta en la base de datos un dispositivo, creado con los atributos pasados como parámetros. Devuelve el id del dispositivo creado."""
         c= Consultas()
         cursor= conexion.cursor()
-        cursor.execute(c.insertDispositivo(), (nombre, modelo, nroPuerto, 'S', 'N'))
+        cursor.execute(c.insertDispositivo(), (nombre, modelo, nroPuerto, 'S'))
         cursor.close()
         conexion.commit()
         cursor= conexion.cursor()
@@ -586,6 +721,29 @@ class ManejadorBD(object):
         resultado= cursor.fetchone()
         cursor.close()        
         return resultado[0]
+    
+    def insertarDestinatario(self, conexion, nombre, celular, mail, horaMin, horaMax):
+        """Inserta en la base de datos un destinatario. Recibe como parámetros la conexión a la base y los atributos del destinatario a insertar. Devuelve el id del destinatario creado"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertDestinatario(), (nombre, celular, mail, horaMin, horaMax))
+        cursor.close()
+        conexion.commit()
+        cursor= conexion.cursor()
+        cursor.execute(c.selectUltimoDestinatario())
+        resultado= cursor.fetchone()
+        cursor.close()        
+        return resultado[0]
+    
+    def insertarDestinatarioTipoLog(self, conexion, idTipoLog, idDestinatario):
+        """Inserta en la base de datos un factor. Recibe como parámetros la conexión a la base y los atributos del factor a insertar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.insertDestinatarioTipoLog(), (idTipoLog, idDestinatario))
+        cursor.close()
+        conexion.commit()
+        cursor.close()        
+        return None
     
     def eliminadoLogicoFactor(self, conexion, idFactor):
         """Elimina lógicamente un factor del sistema, esta operación consiste en cambiar su atributo activoSistema.
@@ -735,6 +893,34 @@ class ManejadorBD(object):
         conexion.commit()
         return None
     
+    def asignarFactorSensor (self, conexion, idFactor, idDispositivo):
+        """Asigna un factor al sensor pasado como parámetro."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateFactorSensor(), (idFactor, idDispositivo))
+        cursor.close()  
+        conexion.commit()
+        return None
+    
+    def asignarGrupoActuadoresActuador (self, conexion, idGrupoActuadores, idDispositivo):
+        """Asigna un grupo de actuadores al actuador pasado como parámetro."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateGrupoActuadorActuador(), (idGrupoActuadores, idDispositivo))
+        cursor.close()  
+        conexion.commit()
+        return None
+    
+    def asignarGrupoActuadoresActuadorAvance (self, conexion, idGrupoActuadores, idDispositivo):
+        """Asigna un grupo de actuadores al actuador de avance pasado como parámetro."""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateGrupoActuadorActuadorAvance(), (idGrupoActuadores, idDispositivo))
+        cursor.close()  
+        conexion.commit()
+        return None
+        
+    
     def recuperarActuadorAvance (self, conexion, idDispositivo, numeroPosicion):
         """Actualiza el estado alerta y la posición actual de un actuador de avance. Recibe como parámetros el idDispositivo y la posición a actualizar."""
         c= Consultas()
@@ -744,4 +930,174 @@ class ManejadorBD(object):
         cursor.execute(c.updatePosicionActuadorAvance(), (numeroPosicion, idDispositivo))
         cursor.close() 
         conexion.commit()
+        return None
+    
+    def eliminarDestinatarioTipoLog(self, conexion, idTipoLogEvento, idDestinatario):
+        """Elimina la asociacion de un destinatario a un tipo de log de eventos
+        Recibe como parámetros la conexión a la base de datos, el id de destinatario y el id del tipo de log de eventos"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.deleteDestinatarioTipoLogEvento(),(idTipoLogEvento, idDestinatario))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarDestinatario(self, conexion, idDestinatario, nombre, celular, mail, horaMin, horaMax):
+        """Actualiza los datos de un destinatario ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del destinatario a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateDestinatario(),(nombre, celular, mail, horaMin, horaMax, idDestinatario))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarDispositivo(self, conexion, idDispositivo, nombre, modelo, nroPuerto):
+        """Actualiza los datos de un dispositivo ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del dispositivo a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateDispositivo(),(nombre, modelo, nroPuerto, idDispositivo))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarSensor(self, conexion, idDispositivo, formulaConversion, idTipoPuerto, idPlacaPadre, idFactor):
+        """Actualiza los datos de un sensor ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del sensor a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateSensor(),(formulaConversion, idTipoPuerto, idPlacaPadre, idFactor, idDispositivo))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarActuadorAvance(self, conexion, idDispositivo, posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores):
+        """Actualiza los datos de un actuador de avance ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del actuador de avance a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateActuadorAvance(),(posicion, idTipoPuerto, idTipoActuador, idPlacaPadre, nroPuertoRetroceso, tiempoEntrePosiciones, idGrupoActuadores, idDispositivo))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarActuador(self, conexion, idDispositivo, idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores):
+        """Actualiza los datos de un actuador ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del actuadors a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateActuador(),(idTipoPuerto, idTipoActuador, idPlacaPadre, idGrupoActuadores, idDispositivo))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarGrupoActuadores(self, conexion, idGrupoActuadores, nombre, deAvance):
+        """Actualiza los datos de un actuador ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del actuadors a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateGrupoActuadores(),(nombre, deAvance, idGrupoActuadores))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarTipoActuador(self, conexion, idTipoActuador, nombre):
+        """Actualiza los datos de un tipo de actuador ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del tipo de actuador a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateTipoActuador(),(nombre, idTipoActuador))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarTipoPlaca(self, conexion, idTipoPlaca, nombre):
+        """Actualiza los datos de un tipo de actuador ingresado en el sistema
+        Recibe como parámetros la conexión a la base de datos, y los datos del tipo de actuador a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateTipoPlaca(),(nombre, idTipoPlaca))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarTipoLogEvento(self, conexion, idTipoLogEvento, enviarMail, enviarSMS):
+        """Actualiza los datos de un tipo de log de evento
+        Recibe como parámetros la conexión a la base de datos, y los datos del tipo de log de evento a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateTipoLogEvento(),(enviarMail, enviarSMS, idTipoLogEvento))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarFactor(self, conexion, idFactor, nombre, unidad, valorMin, valorMax, umbral):
+        """Actualiza los datos de un factor
+        Recibe como parámetros la conexión a la base de datos, y los datos del factor a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateFactor(),(nombre, unidad, valorMin, valorMax, umbral, idFactor))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarPlacaAuxiliar(self, conexion, idDispositivo, nroSerie, idTipoPlaca, idPlacaPadre):
+        """Actualiza los datos de una placa auxiliar
+        Recibe como parámetros la conexión a la base de datos, y los datos de la placa auxiliar a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updatePlacaAuxiliar(),(nroSerie, idTipoPlaca, idPlacaPadre, idDispositivo))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarNivelSeveridad(self, conexion, idNivel, nombre, idFactor, prioridad, rangoMinimo, rangoMaximo):
+        """Actualiza los datos de un nivel de severidad
+        Recibe como parámetros la conexión a la base de datos, y los datos del nivel de severidad a actualizar"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updateNivelSeveridad(),(nombre, idFactor, prioridad, rangoMinimo, rangoMaximo, idNivel))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def actualizarPlaca(self, conexion, periodicidadLecturas, periodicidadNiveles):
+        """Actualiza los parametros de la placa controladora
+        Recibe como parámetros la conexión a la base de datos, y los parametros de la placa controladora"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.updatePlaca(),(periodicidadLecturas, periodicidadNiveles))
+        cursor.close() 
+        conexion.commit() 
+        return None
+
+    def eliminarPerfilActivacion(self, conexion, idNivelSeveridad):
+        """Elimina el perfil de activacion de un nivel de severidad
+        Recibe como parámetros la conexión a la base de datos, y el identificador del nivel de severidad al cual pertenece el perfil de activacion"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.deletePerfilActivacion(),(idNivelSeveridad,))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def eliminarDestinatariosTipoLogs(self, conexion, idDestinatario):
+        """Elimina la asociacion entre un destinatarios y todos los tipos de logs que tuviera asignados
+        Recibe como parámetros la conexión a la base de datos, y el identificador del destinatario"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.deleteDestinatariosTiposLog(),(idDestinatario,))
+        cursor.close() 
+        conexion.commit() 
+        return None
+    
+    def eliminarDestinatario(self, conexion, idDestinatario):
+        """Elimina un destinatario del sistema
+        Recibe como parámetros la conexión a la base de datos, y el identificador del destinatario"""
+        c= Consultas()
+        cursor= conexion.cursor()
+        cursor.execute(c.deleteDestinatario(),(idDestinatario,))
+        cursor.close() 
+        conexion.commit() 
         return None

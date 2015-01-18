@@ -3,6 +3,8 @@
 Archivo de propiedades del sistema
 """
 
-pathBD= "/home/eduardo/workspace/SGIA/src/recursos/sgiaBDD"
+pathBD= "/opt/sqliteStudio/sgiaBDD"
+#pathBD= "/usr/userapps/SGIA/src/recursos/sgiaBDD"
 porcentajeLecturasProcNiveles= 60
-
+factorInformeLecturas= 3
+factorRecuperacion= 2
